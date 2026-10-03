@@ -22,12 +22,13 @@ const DEFAULT_RUNS_DIR = "runs";
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 /**
- * Reads env (Bun auto-loads `.env`) and returns a typed config. Fails fast
- * with an actionable message naming the missing/invalid key.
+ * Reads only the Steel section of env. Used directly by Steel-only tooling
+ * (smoke scripts) that does not need the TypeSafe key; `loadConfig` builds
+ * on it. Fails fast with an actionable message naming the bad key.
  */
-export function loadConfig(
+export function loadSteelConfig(
   env: Record<string, string | undefined> = process.env,
-): QamlConfig {
+): QamlSteelConfig {
   const baseUrl = (
     env.STEEL_BASE_URL?.trim() || DEFAULT_STEEL_BASE_URL
   ).replace(/\/+$/, "");
@@ -49,6 +50,18 @@ export function loadConfig(
     );
   }
 
+  return { baseUrl, mode, apiKey: steelApiKey };
+}
+
+/**
+ * Reads env (Bun auto-loads `.env`) and returns a typed config. Fails fast
+ * with an actionable message naming the missing/invalid key.
+ */
+export function loadConfig(
+  env: Record<string, string | undefined> = process.env,
+): QamlConfig {
+  const steel = loadSteelConfig(env);
+
   const typesafeApiKey = env.TYPESAFE_API_KEY?.trim();
   if (!typesafeApiKey) {
     throw new Error(
@@ -57,7 +70,7 @@ export function loadConfig(
   }
 
   return {
-    steel: { baseUrl, mode, apiKey: steelApiKey },
+    steel,
     typesafe: {
       apiKey: typesafeApiKey,
       jevModel: env.QAML_JEV_MODEL?.trim() || DEFAULT_JEV_MODEL,

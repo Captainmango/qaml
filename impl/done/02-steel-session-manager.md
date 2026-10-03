@@ -67,12 +67,12 @@ Key rules:
 
 ## Tasks
 
-- [ ] Implement `SteelSessionManager` in `src/steel/session-manager.ts`.
-- [ ] Implement connect-URL handling (`websocketUrl` + cloud-only apiKey
+- [x] Implement `SteelSessionManager` in `src/steel/session-manager.ts`.
+- [x] Implement connect-URL handling (`websocketUrl` + cloud-only apiKey
   append) and a `redactApiKey(url)` helper for the cloud case.
-- [ ] Implement the viewer-URL fallback for local mode.
-- [ ] Add process-exit hooks for `releaseAll()`.
-- [ ] Write `scripts/steel-smoke.ts`: health-check, create a session, print id
+- [x] Implement the viewer-URL fallback for local mode.
+- [x] Add process-exit hooks for `releaseAll()`.
+- [x] Write `scripts/steel-smoke.ts`: health-check, create a session, print id
   + viewer URL + (redacted) connect URL, wait ~5s, release, confirm release
   resolves.
 

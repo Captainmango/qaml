@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "@/utils/config.ts";
+import { loadConfig, loadSteelConfig } from "@/utils/config.ts";
 
 const baseEnv = { TYPESAFE_API_KEY: "ts-key" } as const;
 
@@ -51,5 +51,21 @@ describe("loadConfig", () => {
     });
     expect(config.typesafe.jevModel).toBe("jev-custom");
     expect(config.runsDir).toBe("out/runs");
+  });
+});
+
+describe("loadSteelConfig", () => {
+  it("defaults to local mode without requiring any API keys", () => {
+    expect(loadSteelConfig({})).toEqual({
+      baseUrl: "http://localhost:3000",
+      mode: "local",
+      apiKey: undefined,
+    });
+  });
+
+  it("requires STEEL_API_KEY for a non-local base URL", () => {
+    const env = { STEEL_BASE_URL: "https://steel.example.com" };
+    expect(() => loadSteelConfig(env)).toThrow(/STEEL_API_KEY/);
+    expect(loadSteelConfig({ ...env, STEEL_API_KEY: "k" }).mode).toBe("cloud");
   });
 });
