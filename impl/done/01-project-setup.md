@@ -39,7 +39,7 @@ layout and a reachable Steel instance at `http://localhost:3000`.
 
 ## Tasks
 
-- [ ] `bun add @typesafe-ai/sdk steel-sdk browser-use zod yaml`
+- [x] `bun add @typesafe-ai/sdk steel-sdk browser-use zod yaml`
 - [x] Add a root `docker-compose.yml` for the local Steel instance:
 
   ```yaml
@@ -56,20 +56,21 @@ layout and a reachable Steel instance at `http://localhost:3000`.
 
   Add `.steel-cache/` to `.gitignore`. (Single image per Steel's current
   docs; the older api+ui split compose works too but is more moving parts.)
-- [ ] Add `package.json` scripts:
+- [x] Add `package.json` scripts:
   - `"start": "bun run index.ts"`
   - `"typecheck": "bunx tsc --noEmit"`
   - `"test": "bun test"`
   - `"steel:up": "docker compose up -d"`
   - `"steel:down": "docker compose down"`
-  - `"steel:logs": "docker compose logs -f steel"`
-- [ ] Create the directory skeleton (empty until later stages):
+  - `"steel:logs": "docker compose logs -f api"` (the committed compose uses
+    the api+ui split, so the Steel API service is named `api`)
+- [x] Create the directory skeleton (empty until later stages):
   - `src/steel/`, `src/browser/`, `src/agent/`, `src/suite/`, `src/report/`,
     `src/mcp/`
   - `suites/examples/` (example `*.qaml.yaml` suites)
   - `scripts/` (live smoke scripts)
   - `runs/` (run artifacts — add to `.gitignore`)
-- [ ] Add `.env.example`:
+- [x] Add `.env.example`:
   - `STEEL_BASE_URL=http://localhost:3000` (default local; set to the cloud
     endpoint + `STEEL_API_KEY=` to use Steel Cloud instead)
   - `STEEL_API_KEY=` (optional locally; required for Steel Cloud)
@@ -80,19 +81,20 @@ layout and a reachable Steel instance at `http://localhost:3000`.
     plus the matching provider key (`OPENAI_API_KEY=` or
     `OPENROUTER_API_KEY=`)
   - `QAML_RUNS_DIR=runs` (optional override)
-- [ ] Create `src/config.ts`: reads env, exports a typed `QamlConfig`:
+- [x] Create `src/config.ts`: reads env, exports a typed `QamlConfig`:
   - Steel: `baseUrl` + `mode: 'local' | 'cloud'` (cloud when the base URL is
     not localhost) + API key presence check **only in cloud mode**.
   - TypeSafe key presence check (always), Jev model id, runs dir.
   - Fail fast with an actionable message naming the missing key.
-- [ ] Create `src/steel/health.ts`: `assertSteelReachable(baseUrl)` — GET
-  `/api/health`, and on failure throw "Steel is not reachable at
+- [x] Create `src/steel/health.ts`: `assertSteelReachable(baseUrl)` — GET
+  `/v1/health` (the health route on the current `steel-browser-api` image),
+  and on failure throw "Steel is not reachable at
   `<baseUrl>` — run `bun run steel:up` (or check `STEEL_BASE_URL`)". Every
   entrypoint (CLI, MCP, smoke scripts) calls this before touching sessions.
-- [ ] Replace `index.ts` placeholder with a temporary entry that loads config,
+- [x] Replace `index.ts` placeholder with a temporary entry that loads config,
   runs the health check, and prints readiness (replaced by the real CLI in
   stage 09).
-- [ ] Update `AGENTS.md`: new layout, scripts (incl. `steel:up/down`), env
+- [x] Update `AGENTS.md`: new layout, scripts (incl. `steel:up/down`), env
   requirements, Docker prerequisite, note that `node_modules` install may
   skip Playwright browser download.
 
@@ -106,8 +108,10 @@ layout and a reachable Steel instance at `http://localhost:3000`.
 ## Verification
 
 - `bun install` succeeds.
-- `bun run steel:up` starts the container; `curl http://localhost:3000/api/health`
-  responds OK; `http://localhost:3000/ui` loads in a browser.
+- `bun run steel:up` starts the container; `curl http://localhost:3000/v1/health`
+  responds OK; the debug UI loads in a browser (`http://localhost:5173` with
+  the committed api+ui split compose; `http://localhost:3000/ui` on the
+  single image).
 - `bunx tsc --noEmit` passes.
 - `bun run index.ts` with a dummy `TYPESAFE_API_KEY` and Steel up prints
   readiness; with Steel down, exits non-zero with the "run `bun run
