@@ -1,0 +1,28 @@
+name: steel
+
+services:
+  api:
+    image: ghcr.io/steel-dev/steel-browser-api@sha256:2948a8d8ba1103146dac1c32a121e511955f43976da6905ada0c32fd19b41f59 # latest as of 2026-10-03
+    ports:
+      - "3000:3000"
+      - "9223:9223"
+    volumes:
+      - ./.cache:/app/.cache
+    networks:
+      - steel-network
+
+  ui:
+    image: ghcr.io/steel-dev/steel-browser-ui@sha256:e88f581d78fe8e16e040eae05ff8a8439de9795bdfd45c518cb7692f069df97a # latest as of 2026-10-03
+    ports:
+      - "5173:80"
+    environment:
+      - API_URL=http://api:3000
+    depends_on:
+      - api
+    networks:
+      - steel-network
+
+networks:
+  steel-network:
+    name: steel-network
+    driver: bridge
