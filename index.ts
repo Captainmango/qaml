@@ -1,5 +1,5 @@
-import { loadConfig } from "./src/config.ts";
-import { assertSteelReachable } from "./src/steel/health.ts";
+import { assertSteelReachable } from "@/steel/health.ts";
+import { loadConfig } from "@/utils/config.ts";
 
 // Temporary entrypoint until the real CLI lands in stage 09: load config,
 // run the Steel health check, and print readiness.

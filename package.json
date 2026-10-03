@@ -6,7 +6,8 @@
   "scripts": {
     "start": "bun run index.ts",
     "typecheck": "bunx tsc --noEmit",
-    "test": "bun test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "steel:up": "docker compose up -d",
     "steel:down": "docker compose down",
     "steel:logs": "docker compose logs -f api",
@@ -19,7 +20,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "vitest": "^5.0.3"
   },
   "peerDependencies": {
     "typescript": "^7"
