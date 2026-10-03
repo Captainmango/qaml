@@ -40,7 +40,7 @@ layout and a reachable Steel instance at `http://localhost:3000`.
 ## Tasks
 
 - [ ] `bun add @typesafe-ai/sdk steel-sdk browser-use zod yaml`
-- [ ] Add a root `docker-compose.yml` for the local Steel instance:
+- [x] Add a root `docker-compose.yml` for the local Steel instance:
 
   ```yaml
   services:
