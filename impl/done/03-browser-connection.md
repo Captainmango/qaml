@@ -53,10 +53,10 @@ async function connectBrowser(handle: SteelSessionHandle): Promise<BrowserSessio
 
 ## Tasks
 
-- [ ] Implement `connectBrowser` + readiness wait in
+- [x] Implement `connectBrowser` + readiness wait in
   `src/browser/connection.ts`.
-- [ ] Implement `snapshotState`, `act`, and `screenshot` helpers.
-- [ ] Write `scripts/browser-smoke.ts`:
+- [x] Implement `snapshotState`, `act`, and `screenshot` helpers.
+- [x] Write `scripts/browser-smoke.ts`:
   1. Create a Steel session via the stage-02 manager.
   2. Attach browser-use over CDP.
   3. Navigate to `https://www.saucedemo.com`.
@@ -66,7 +66,7 @@ async function connectBrowser(handle: SteelSessionHandle): Promise<BrowserSessio
      confirm the value stuck.
   6. Save a screenshot to `runs/smoke/`; release the Steel session in a
      `finally`.
-- [ ] Document any quirks found (timeouts, first-target races, Steel session
+- [x] Document any quirks found (timeouts, first-target races, Steel session
   warmup, action-name drift vs. docs) in `src/browser/connection.ts` comments.
 
 ## Files
