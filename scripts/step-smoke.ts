@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { Command } from "commander";
 import { createJevClient, type JevClient } from "@/agent/jev.ts";
 import { formatTraceEntry } from "@/agent/loop.ts";
 import { createTextHelper } from "@/agent/text.ts";
@@ -53,8 +54,33 @@ const MAX_LOGIN_ATTEMPTS = 5;
  * Evidence PNGs land in `<runDir>/steps/`.
  *
  * Flags: `--skip-negative` (phase 1 only), `--negative-only` (log in without
- * asserting phase 1, then run phase 2).
+ * asserting phase 1, then run phase 2). See `--help`.
  */
+
+interface SmokeFlags {
+  skipNegative: boolean;
+  negativeOnly: boolean;
+}
+
+function parseFlags(): SmokeFlags {
+  const options = new Command()
+    .name("step-smoke")
+    .description("Live smoke test for per-step act + judge (stage 06).")
+    .option(
+      "--skip-negative",
+      "phase 1 only — skip the judge-independence check",
+    )
+    .option(
+      "--negative-only",
+      "log in without asserting phase 1, then run phase 2",
+    )
+    .parse()
+    .opts<{ skipNegative?: boolean; negativeOnly?: boolean }>();
+  return {
+    skipNegative: options.skipNegative === true,
+    negativeOnly: options.negativeOnly === true,
+  };
+}
 
 function loginStep(id: string, expect: string): QamlStep {
   return {
@@ -95,10 +121,9 @@ function printStepResult(
 }
 
 async function main(): Promise<void> {
-  const args = new Set(process.argv.slice(2));
-  const negativeOnly = args.has("--negative-only");
-  const runNegative = !args.has("--skip-negative");
-  const runPositive = !negativeOnly;
+  const flags = parseFlags();
+  const runNegative = !flags.skipNegative;
+  const runPositive = !flags.negativeOnly;
 
   const config = loadConfig();
   if (!config.text) {

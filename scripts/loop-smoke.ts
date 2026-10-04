@@ -1,3 +1,4 @@
+import { Command } from "commander";
 import { createJevClient, type JevClient } from "@/agent/jev.ts";
 import {
   type AgentRunResult,
@@ -35,8 +36,30 @@ const INVENTORY_PATH = "/inventory.html";
  * goal on the same page must end `blocked`/`max_actions` — never a false
  * `done`. No browser-use `Agent` anywhere: snapshot → Jev → registry actions.
  *
- * Flags: `--skip-negative`, `--negative-only`.
+ * Flags: `--skip-negative`, `--negative-only` (see `--help`).
  */
+
+interface SmokeFlags {
+  skipNegative: boolean;
+  negativeOnly: boolean;
+}
+
+function parseFlags(): SmokeFlags {
+  const options = new Command()
+    .name("loop-smoke")
+    .description("Live smoke test for the Jev decision loop (stage 05).")
+    .option("--skip-negative", "skip the impossible-goal negative run")
+    .option(
+      "--negative-only",
+      "skip the positive login run, only run the negative one",
+    )
+    .parse()
+    .opts<{ skipNegative?: boolean; negativeOnly?: boolean }>();
+  return {
+    skipNegative: options.skipNegative === true,
+    negativeOnly: options.negativeOnly === true,
+  };
+}
 
 function printResult(
   label: string,
@@ -60,9 +83,9 @@ function printResult(
 }
 
 async function main(): Promise<void> {
-  const args = new Set(process.argv.slice(2));
-  const runPositive = !args.has("--negative-only");
-  const runNegative = !args.has("--skip-negative");
+  const flags = parseFlags();
+  const runPositive = !flags.negativeOnly;
+  const runNegative = !flags.skipNegative;
 
   const config = loadConfig();
   if (!config.text) {

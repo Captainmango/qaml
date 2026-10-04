@@ -12,7 +12,8 @@ part of the product contract.
 
 ## Design
 
-`src/cli.ts`, using `node:util`'s `parseArgs` (no new dependency):
+`src/cli.ts`, using `commander` (already a dependency — the live smokes in
+`scripts/` use it for flag parsing):
 
 ```
 qaml run <suite-file> [--base-url <url>] [--out <dir>]
@@ -40,7 +41,7 @@ Behavior:
 
 ## Tasks
 
-- [ ] Implement `src/cli.ts` (parseArgs, subcommands, exit codes, stderr
+- [ ] Implement `src/cli.ts` (commander, subcommands, exit codes, stderr
   progress / stdout summary split).
 - [ ] Replace `index.ts` with the CLI entry.
 - [ ] Add the `qaml` script alias to `package.json`.
