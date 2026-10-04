@@ -16,7 +16,7 @@ TypeScript implementation of the jev-ultrafast loop architecture:
 ## Depends on
 
 - `03-browser-connection.md` (`snapshotState`, `act`, action-name constants)
-- `@typesafe-ai/sdk` installed (stage 01), `TYPESAFE_API_KEY` set
+- `@typesafe-ai/sdk` installed (stage 01), `QAML_DECISION_MODEL_API_KEY` set
 
 ## Design (`src/agent/`)
 
@@ -87,8 +87,8 @@ thin and capped.
 ### `text.ts` — the only generative call
 
 When op is `TYPE_TEXT`: POST to the configured OpenAI-compatible endpoint
-(`QAML_TEXT_MODEL`, `QAML_TEXT_MODEL_BASE_URL`, provider key) with the step
-instruction + target context; require the reply to parse as
+(`QAML_TEXT_MODEL`, `QAML_TEXT_MODEL_BASE_URL`, `QAML_TEXT_MODEL_API_KEY`)
+with the step instruction + target context; require the reply to parse as
 `{ "text": string }` — anything else is a retry-then-fail. Cache the value:
 if a stale-page retry happens with identical helper input, reuse the cached
 text instead of re-generating (jev-ultrafast's interrupted-request rule).
@@ -164,9 +164,8 @@ and accumulating the trace. Never throws for page-level weirdness — returns
   is always accepted as honest. Three consecutive wasted cycles (stale
   targets, unreadable dropdowns, failed actions) end the loop `blocked`
   instead of burning the whole budget.
-- Text-helper config (`loadTextConfig` in `src/utils/config.ts`): key
-  precedence `QAML_TEXT_MODEL_API_KEY` → provider key by base-URL host
-  (OpenRouter vs. OpenAI) → the other provider key.
+- Text-helper config (`loadTextConfig` in `src/utils/config.ts`): the key is
+  `QAML_TEXT_MODEL_API_KEY`.
 
 
 ## Files
@@ -177,7 +176,7 @@ and accumulating the trace. Never throws for page-level weirdness — returns
 
 ## Verification
 
-Live (Steel up via `bun run steel:up`; needs `TYPESAFE_API_KEY` + text-helper key, manual):
+Live (Steel up via `bun run steel:up`; needs `QAML_DECISION_MODEL_API_KEY` + `QAML_TEXT_MODEL_API_KEY`, manual):
 
 - `bun run scripts/loop-smoke.ts` logs into Sauce Demo; trace shows sensible
   ops (`TYPE_TEXT` ×2 → `CLICK` → `DONE`) and the post-loop URL is

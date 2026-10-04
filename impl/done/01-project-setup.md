@@ -26,9 +26,9 @@ layout and a reachable Steel instance at `http://localhost:3000`.
   9223, debug UI at `http://localhost:3000/ui`. No `STEEL_API_KEY` is needed
   against the local instance; the key is only required when `STEEL_BASE_URL`
   points at Steel Cloud.
-- The only required API key for local development is `TYPESAFE_API_KEY` (Jev
-  decisions + verdicts). A generative key is needed only for the `TYPE_TEXT`
-  text helper (stage 05).
+- The only required API key for local development is
+  `QAML_DECISION_MODEL_API_KEY` (Jev decisions + verdicts). A generative key
+  is needed only for the `TYPE_TEXT` text helper (stage 05).
 - `browser-use` has a `postinstall` that runs `playwright install chromium`.
   Steel (the container) hosts the browser, so local Chromium is optional; set
   `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` during `bun install` to skip the
@@ -74,12 +74,11 @@ layout and a reachable Steel instance at `http://localhost:3000`.
   - `STEEL_BASE_URL=http://localhost:3000` (default local; set to the cloud
     endpoint + `STEEL_API_KEY=` to use Steel Cloud instead)
   - `STEEL_API_KEY=` (optional locally; required for Steel Cloud)
-  - `TYPESAFE_API_KEY=` (required — Jev decision + verdict calls)
+  - `QAML_DECISION_MODEL_API_KEY=` (required — Jev decision + verdict calls)
   - `QAML_JEV_MODEL=jev-latest` (optional override)
   - Text helper (stage 05): `QAML_TEXT_MODEL=` (e.g. a small fast model),
-    `QAML_TEXT_MODEL_BASE_URL=` (OpenAI-compatible endpoint; OpenRouter works),
-    plus the matching provider key (`OPENAI_API_KEY=` or
-    `OPENROUTER_API_KEY=`)
+    `QAML_TEXT_MODEL_BASE_URL=` (OpenAI-compatible endpoint),
+    `QAML_TEXT_MODEL_API_KEY=`
   - `QAML_RUNS_DIR=runs` (optional override)
 - [x] Create `src/config.ts`: reads env, exports a typed `QamlConfig`:
   - Steel: `baseUrl` + `mode: 'local' | 'cloud'` (cloud when the base URL is
@@ -113,7 +112,7 @@ layout and a reachable Steel instance at `http://localhost:3000`.
   the committed api+ui split compose; `http://localhost:3000/ui` on the
   single image).
 - `bunx tsc --noEmit` passes.
-- `bun run index.ts` with a dummy `TYPESAFE_API_KEY` and Steel up prints
-  readiness; with Steel down, exits non-zero with the "run `bun run
-  steel:up`" message; with `TYPESAFE_API_KEY` missing, exits non-zero naming
-  the key.
+- `bun run index.ts` with a dummy `QAML_DECISION_MODEL_API_KEY` and Steel up
+  prints readiness; with Steel down, exits non-zero with the "run `bun run
+  steel:up`" message; with `QAML_DECISION_MODEL_API_KEY` missing, exits
+  non-zero naming the key.

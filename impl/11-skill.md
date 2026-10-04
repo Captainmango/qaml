@@ -23,8 +23,8 @@ plus a concise body. Contents:
    automated suite.
 2. **Prerequisites** — the local Steel container running (`bun run steel:up`,
    or `STEEL_BASE_URL` + `STEEL_API_KEY` for Steel Cloud) plus
-   `TYPESAFE_API_KEY` (+ a text-helper provider key) in the MCP server env, or
-   shell env for CLI use.
+   `QAML_DECISION_MODEL_API_KEY` (+ `QAML_TEXT_MODEL_API_KEY` for the text
+   helper) in the MCP server env, or shell env for CLI use.
 3. **How to author a suite** — the `*.qaml.yaml` contract from stage 04 with a
    minimal example; rules of thumb: one user-visible goal per step, `expect`
    must be observable on the page, keep secrets in `${ENV_VARS}`.
@@ -79,4 +79,4 @@ Claude). Document both; keep the in-repo copy the single source of truth.
   with the assistant you have handy).
 - The end-to-end gate above is green.
 - `grep -r "$STEEL_API_KEY" runs/ skills/ README.md` and
-  `grep -r "$TYPESAFE_API_KEY" runs/ skills/ README.md` find nothing.
+  `grep -r "$QAML_DECISION_MODEL_API_KEY" runs/ skills/ README.md` find nothing.

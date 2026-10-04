@@ -38,12 +38,13 @@ without shelling out manually.
   worst case. (Future: return a run id immediately + a `get_run` polling
   tool — deliberately out of scope here.)
 - Errors (invalid suite, Steel unreachable — point at `bun run steel:up`,
-  missing `TYPESAFE_API_KEY`, session creation failure) return MCP error
-  results with the actionable message, never a stack trace.
+  missing `QAML_DECISION_MODEL_API_KEY`, session creation failure) return MCP
+  error results with the actionable message, never a stack trace.
 
 Env (`STEEL_BASE_URL` if not the default `http://localhost:3000`,
-`STEEL_API_KEY` for cloud mode only, `TYPESAFE_API_KEY`, text-helper keys)
-comes from the assistant's MCP server config — document exactly where.
+`STEEL_API_KEY` for cloud mode only, `QAML_DECISION_MODEL_API_KEY`, and
+`QAML_TEXT_MODEL` + `QAML_TEXT_MODEL_API_KEY` for the text helper) comes from
+the assistant's MCP server config — document exactly where.
 
 ### Registration examples (put in docs)
 
@@ -57,8 +58,8 @@ comes from the assistant's MCP server config — document exactly where.
       "command": ["bun", "run", "/abs/path/to/qaml/src/mcp/server.ts"],
       "environment": {
         "STEEL_BASE_URL": "http://localhost:3000",
-        "TYPESAFE_API_KEY": "…",
-        "OPENROUTER_API_KEY": "…"
+        "QAML_DECISION_MODEL_API_KEY": "…",
+        "QAML_TEXT_MODEL_API_KEY": "…"
       }
     }
   }

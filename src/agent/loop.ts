@@ -304,7 +304,7 @@ export async function runDecisionLoop(
         if (!textHelper) {
           return finish(
             "error",
-            "Jev chose TYPE_TEXT but no text helper is configured — set QAML_TEXT_MODEL and a provider API key (see .env.example)",
+            "Jev chose TYPE_TEXT but no text helper is configured — set QAML_TEXT_MODEL and QAML_TEXT_MODEL_API_KEY (see .env.example)",
           );
         }
         try {

@@ -12,7 +12,7 @@
 ## Setup
 
 - Install dependencies: `bun install`. Note: `browser-use`'s postinstall (`playwright install chromium`) is intentionally skipped — Steel hosts the browser, so local Chromium is optional. Bun blocks it as untrusted; `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` also skips it.
-- Environment: copy `.env.example` to `.env` (Bun auto-loads it). `TYPESAFE_API_KEY` is required; `STEEL_API_KEY` only when `STEEL_BASE_URL` points at Steel Cloud (non-localhost = cloud mode). The text helper (`QAML_TEXT_MODEL` + base URL + a provider key: `QAML_TEXT_MODEL_API_KEY`, else `OPENAI_API_KEY`/`OPENROUTER_API_KEY` by host) is required for steps that type text — the only generative call in QAML.
+- Environment: copy `.env.example` to `.env` (Bun auto-loads it). `QAML_DECISION_MODEL_API_KEY` (TypeSafe/Jev) is required; `STEEL_API_KEY` only when `STEEL_BASE_URL` points at Steel Cloud (non-localhost = cloud mode). The text helper (`QAML_TEXT_MODEL` + `QAML_TEXT_MODEL_BASE_URL` + `QAML_TEXT_MODEL_API_KEY`) is required for steps that type text — the only generative call in QAML.
 
 ## Steel (Local Browser)
 

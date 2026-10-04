@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig, loadSteelConfig, loadTextConfig } from "@/utils/config.ts";
 
-const baseEnv = { TYPESAFE_API_KEY: "ts-key" } as const;
+const baseEnv = { QAML_DECISION_MODEL_API_KEY: "ts-key" } as const;
 
 describe("loadConfig", () => {
   it("defaults to local mode with the local Steel URL", () => {
@@ -33,8 +33,8 @@ describe("loadConfig", () => {
     expect(() => loadConfig(noKeyEnv)).toThrow(/STEEL_API_KEY/);
   });
 
-  it("fails fast when TYPESAFE_API_KEY is missing", () => {
-    expect(() => loadConfig({})).toThrow(/TYPESAFE_API_KEY/);
+  it("fails fast when QAML_DECISION_MODEL_API_KEY is missing", () => {
+    expect(() => loadConfig({})).toThrow(/QAML_DECISION_MODEL_API_KEY/);
   });
 
   it("rejects an invalid STEEL_BASE_URL", () => {
@@ -59,7 +59,7 @@ describe("loadConfig", () => {
     const config = loadConfig({
       ...baseEnv,
       QAML_TEXT_MODEL: "gpt-4o-mini",
-      OPENAI_API_KEY: "sk-1",
+      QAML_TEXT_MODEL_API_KEY: "sk-1",
     });
     expect(config.text).toEqual({
       model: "gpt-4o-mini",
@@ -73,15 +73,14 @@ describe("loadTextConfig", () => {
   it("is undefined when QAML_TEXT_MODEL is unset", () => {
     expect(loadTextConfig({})).toBeUndefined();
     expect(loadTextConfig({ QAML_TEXT_MODEL: "  " })).toBeUndefined();
-    expect(loadTextConfig({ OPENAI_API_KEY: "sk-1" })).toBeUndefined();
+    expect(loadTextConfig({ QAML_TEXT_MODEL_API_KEY: "sk-1" })).toBeUndefined();
   });
 
-  it("defaults to the OpenAI endpoint and prefers OPENAI_API_KEY", () => {
+  it("defaults to the OpenAI endpoint and uses QAML_TEXT_MODEL_API_KEY", () => {
     expect(
       loadTextConfig({
         QAML_TEXT_MODEL: "gpt-4o-mini",
-        OPENAI_API_KEY: "sk-1",
-        OPENROUTER_API_KEY: "or-1",
+        QAML_TEXT_MODEL_API_KEY: "sk-1",
       }),
     ).toEqual({
       model: "gpt-4o-mini",
@@ -90,40 +89,18 @@ describe("loadTextConfig", () => {
     });
   });
 
-  it("prefers OPENROUTER_API_KEY for an OpenRouter base URL and trims slashes", () => {
+  it("honours QAML_TEXT_MODEL_BASE_URL and trims slashes", () => {
     expect(
       loadTextConfig({
-        QAML_TEXT_MODEL: "openai/gpt-4o-mini",
-        QAML_TEXT_MODEL_BASE_URL: "https://openrouter.ai/api/v1/",
-        OPENAI_API_KEY: "sk-1",
-        OPENROUTER_API_KEY: "or-1",
+        QAML_TEXT_MODEL: "helper-small",
+        QAML_TEXT_MODEL_BASE_URL: "http://localhost:11434/v1/",
+        QAML_TEXT_MODEL_API_KEY: "sk-1",
       }),
     ).toEqual({
-      model: "openai/gpt-4o-mini",
-      baseUrl: "https://openrouter.ai/api/v1",
-      apiKey: "or-1",
+      model: "helper-small",
+      baseUrl: "http://localhost:11434/v1",
+      apiKey: "sk-1",
     });
-  });
-
-  it("falls back to the other provider key when the preferred one is missing", () => {
-    expect(
-      loadTextConfig({
-        QAML_TEXT_MODEL: "m",
-        QAML_TEXT_MODEL_BASE_URL: "https://openrouter.ai/api/v1",
-        OPENAI_API_KEY: "sk-1",
-      })?.apiKey,
-    ).toBe("sk-1");
-  });
-
-  it("lets an explicit QAML_TEXT_MODEL_API_KEY win", () => {
-    expect(
-      loadTextConfig({
-        QAML_TEXT_MODEL: "m",
-        QAML_TEXT_MODEL_API_KEY: "explicit",
-        OPENAI_API_KEY: "sk-1",
-        OPENROUTER_API_KEY: "or-1",
-      })?.apiKey,
-    ).toBe("explicit");
   });
 
   it("fails fast when the model is set but no key exists", () => {
@@ -137,7 +114,7 @@ describe("loadTextConfig", () => {
       loadTextConfig({
         QAML_TEXT_MODEL: "m",
         QAML_TEXT_MODEL_BASE_URL: "not a url",
-        OPENAI_API_KEY: "sk-1",
+        QAML_TEXT_MODEL_API_KEY: "sk-1",
       }),
     ).toThrow(/QAML_TEXT_MODEL_BASE_URL/);
   });

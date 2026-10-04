@@ -25,8 +25,9 @@ const INVENTORY_PATH = "/inventory.html";
 
 /**
  * Live smoke test for the Jev decision loop (stage 05). Needs `bun run
- * steel:up`, TYPESAFE_API_KEY, and the text-helper config (QAML_TEXT_MODEL +
- * provider key) — TYPE_TEXT is impossible without it.
+ * steel:up`, QAML_DECISION_MODEL_API_KEY, and the text-helper config
+ * (QAML_TEXT_MODEL + QAML_TEXT_MODEL_API_KEY) — TYPE_TEXT is impossible
+ * without it.
  *
  * Positive: log into Sauce Demo through the loop; the trace should show
  * sensible ops (TYPE_TEXT ×2 → CLICK → DONE), one Jev request per cycle, the
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
   const config = loadConfig();
   if (!config.text) {
     throw new Error(
-      "Text helper is not configured — set QAML_TEXT_MODEL (+ base URL and provider key) in .env; the login flow needs TYPE_TEXT.",
+      "Text helper is not configured — set QAML_TEXT_MODEL (+ base URL and QAML_TEXT_MODEL_API_KEY) in .env; the login flow needs TYPE_TEXT.",
     );
   }
   await assertSteelReachable(config.steel.baseUrl);

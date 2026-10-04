@@ -8,7 +8,7 @@ export interface QamlSteelConfig {
 
 /**
  * The generative text helper (stage 05, TYPE_TEXT only): any
- * OpenAI-compatible chat-completions endpoint (OpenAI, OpenRouter, local).
+ * OpenAI-compatible chat-completions endpoint.
  */
 export interface QamlTextConfig {
   model: string;
@@ -36,8 +36,8 @@ const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 /**
  * Reads only the Steel section of env. Used directly by Steel-only tooling
- * (smoke scripts) that does not need the TypeSafe key; `loadConfig` builds
- * on it. Fails fast with an actionable message naming the bad key.
+ * (smoke scripts) that does not need the decision-model key; `loadConfig`
+ * builds on it. Fails fast with an actionable message naming the bad key.
  */
 export function loadSteelConfig(
   env: Record<string, string | undefined> = process.env,
@@ -69,9 +69,7 @@ export function loadSteelConfig(
 /**
  * Reads the text-helper section of env. Returns `undefined` when
  * `QAML_TEXT_MODEL` is unset (the helper is only needed for TYPE_TEXT
- * steps); a set model without a usable key fails fast naming the keys tried.
- * Key precedence: explicit `QAML_TEXT_MODEL_API_KEY`, then the provider key
- * matching the base URL's host (OpenRouter vs. OpenAI), then the other one.
+ * steps); a set model without `QAML_TEXT_MODEL_API_KEY` fails fast naming it.
  */
 export function loadTextConfig(
   env: Record<string, string | undefined> = process.env,
@@ -82,24 +80,18 @@ export function loadTextConfig(
   const baseUrl = (
     env.QAML_TEXT_MODEL_BASE_URL?.trim() || DEFAULT_TEXT_BASE_URL
   ).replace(/\/+$/, "");
-  let hostname: string;
   try {
-    hostname = new URL(baseUrl).hostname;
+    new URL(baseUrl);
   } catch {
     throw new Error(
       `QAML_TEXT_MODEL_BASE_URL \`${baseUrl}\` is not a valid URL — set it to e.g. ${DEFAULT_TEXT_BASE_URL} (see .env.example).`,
     );
   }
 
-  const providerKeys = hostname.includes("openrouter")
-    ? [env.OPENROUTER_API_KEY, env.OPENAI_API_KEY]
-    : [env.OPENAI_API_KEY, env.OPENROUTER_API_KEY];
-  const apiKey =
-    env.QAML_TEXT_MODEL_API_KEY?.trim() ||
-    providerKeys.map((key) => key?.trim()).find((key) => key);
+  const apiKey = env.QAML_TEXT_MODEL_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
-      `QAML_TEXT_MODEL is set (\`${model}\`) but no text-helper API key was found — set QAML_TEXT_MODEL_API_KEY, or a provider key for ${baseUrl} (OPENAI_API_KEY / OPENROUTER_API_KEY) in your .env.`,
+      `QAML_TEXT_MODEL is set (\`${model}\`) but QAML_TEXT_MODEL_API_KEY is not — add the key for ${baseUrl} to your .env (see .env.example).`,
     );
   }
 
@@ -115,10 +107,10 @@ export function loadConfig(
 ): QamlConfig {
   const steel = loadSteelConfig(env);
 
-  const typesafeApiKey = env.TYPESAFE_API_KEY?.trim();
-  if (!typesafeApiKey) {
+  const decisionApiKey = env.QAML_DECISION_MODEL_API_KEY?.trim();
+  if (!decisionApiKey) {
     throw new Error(
-      "TYPESAFE_API_KEY is not set — it is required for Jev decision and verdict calls. Add it to your .env (see .env.example).",
+      "QAML_DECISION_MODEL_API_KEY is not set — it is required for Jev decision and verdict calls. Add it to your .env (see .env.example).",
     );
   }
 
@@ -126,7 +118,7 @@ export function loadConfig(
   return {
     steel,
     typesafe: {
-      apiKey: typesafeApiKey,
+      apiKey: decisionApiKey,
       jevModel: env.QAML_JEV_MODEL?.trim() || DEFAULT_JEV_MODEL,
     },
     ...(text && { text }),

@@ -97,7 +97,7 @@ re-snapshots.
 
 ## Verification
 
-Live (Steel up via `bun run steel:up`; needs `TYPESAFE_API_KEY` + text-helper key, manual):
+Live (Steel up via `bun run steel:up`; needs `QAML_DECISION_MODEL_API_KEY` + `QAML_TEXT_MODEL_API_KEY`, manual):
 
 - `bun run scripts/step-smoke.ts` performs a real login step and prints
   `passed: true` with a high verdict probability.

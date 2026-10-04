@@ -82,7 +82,7 @@ Invariants:
 
 ## Verification
 
-Live (Steel up via `bun run steel:up`; needs `TYPESAFE_API_KEY` + text-helper key, manual):
+Live (Steel up via `bun run steel:up`; needs `QAML_DECISION_MODEL_API_KEY` + `QAML_TEXT_MODEL_API_KEY`, manual):
 
 - `bun run scripts/suite-smoke.ts` runs the 3-step example suite green, and
   the printed totals show Jev input/output tokens for the whole run.

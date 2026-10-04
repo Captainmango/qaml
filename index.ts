@@ -10,7 +10,7 @@ async function main(): Promise<void> {
     [
       "QAML is ready.",
       `  Steel:    ${config.steel.baseUrl} (${config.steel.mode})`,
-      `  Jev:      ${config.typesafe.jevModel} (TYPESAFE_API_KEY set)`,
+      `  Jev:      ${config.typesafe.jevModel} (QAML_DECISION_MODEL_API_KEY set)`,
       `  Runs dir: ${config.runsDir}`,
     ].join("\n"),
   );
