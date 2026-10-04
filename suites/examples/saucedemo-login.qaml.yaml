@@ -33,3 +33,12 @@ steps:
     # page plus this string, so it cannot resolve "the product that was
     # added" — name the evidence instead.
     expect: The cart page lists exactly one item, the Sauce Labs Backpack.
+  - id: go-to-checkout
+    instruction: go to the checkout screen
+    expect: The word checkout to be on screen
+  - id: fill-out-checkout-details
+    instruction: Fill out the checkout form with a first name, last name, and American ZIP code
+    expect: all form inputs to have text in them
+  - id: checkout-basket
+    instruction: complete the checkout
+    expect: the text "thank you for your order" should be on screen
