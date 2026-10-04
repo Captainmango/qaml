@@ -7,7 +7,7 @@
 
 ## Layout
 
-- Layout: `src/utils/` (config: env → typed `QamlConfig`, fail-fast), `src/steel/` (health, session manager), `src/browser/` (browser-use over Steel CDP: connect, snapshot, `act`, `prepareBrowserState` navigate + optional state clear), `src/agent/` (Jev decision loop: `jev` client wrapper, `snapshot` element table, `questions` speculative fan-out, `executor` op → registry action, `text` helper, `loop` cycle driver), `src/suite/` (schema, loader, `verdict` independent Jev Noul judge, `step-runner` per-step act + judge + evidence, `runner` whole-suite orchestration → `SuiteResult`: one session, ordered steps, short-circuit/skip, token+cycle totals, progress log callback, `clear_browser_state` setting for pristine runs), `src/report/` (`writeReport` → `report.json` + `report.md` in the run dir, `formatConsoleSummary`; raw `${VAR}` step strings only, API-key redaction), `src/mcp/`, `suites/examples/` (`*.qaml.yaml`), `tests/` (vitest unit tests), `scripts/` (live smoke scripts), `runs/` (run artifacts, gitignored). `index.ts` is a temporary readiness entry until the real CLI lands in stage 09.
+- Layout: `src/utils/` (config: env → typed `QamlConfig`, fail-fast), `src/steel/` (health, session manager), `src/browser/` (browser-use over Steel CDP: connect, snapshot, `act`, `prepareBrowserState` navigate + optional state clear), `src/agent/` (Jev decision loop: `jev` client wrapper, `snapshot` element table, `questions` speculative fan-out, `executor` op → registry action, `text` helper, `loop` cycle driver), `src/suite/` (schema, loader, `verdict` independent Jev Noul judge, `step-runner` per-step act + judge + evidence, `runner` whole-suite orchestration → `SuiteResult`: one session, ordered steps, short-circuit/skip, token+cycle totals, progress log callback, `clear_browser_state` setting for pristine runs), `src/report/` (`writeReport` → `report.json` + `report.md` in the run dir, `formatConsoleSummary`; raw `${VAR}` step strings only, API-key redaction), `src/cli.ts` (commander: `run` / `validate` subcommands, exit-code contract 0/1/2, progress → stderr / summary → stdout, injectable deps for offline tests), `src/mcp/`, `suites/examples/` (`*.qaml.yaml`), `tests/` (vitest unit tests), `scripts/` (live smoke scripts), `runs/` (run artifacts, gitignored). `index.ts` is a thin `#!/usr/bin/env bun` entry that invokes the CLI's `main` and exits with its returned code.
 
 ## Setup
 
@@ -20,7 +20,7 @@
 
 ## Running the App
 
-- Run the app: `bun run index.ts` (or `bun start`) — loads config, health-checks Steel, prints readiness.
+- Run the CLI: `bun run qaml run suites/examples/saucedemo-login.qaml.yaml` (equivalently `bun run index.ts run …`) — runs the suite, streams progress to stderr, prints the console summary + report paths to stdout. `bun run qaml validate <suite-file>` checks a suite without running it. Exit codes (contract): `0` all steps passed / validate ok, `1` at least one step failed or errored, `2` usage error, invalid suite, or infra failure before the run.
 - Scripts: `bun run typecheck` (`bunx tsc --noEmit`), `bun run test` / `test:watch` (vitest), `bun run check` / `check:fix` (Biome).
 
 ## Code Conventions

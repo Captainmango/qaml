@@ -116,6 +116,28 @@ describe("buildDecisionRequest", () => {
     );
   });
 
+  // Regression pin: on a post-goal page (e.g. inventory after a successful
+  // login) the login elements are GONE because the goal succeeded. Wording
+  // BLOCKED as plain "missing elements" made Jev split BLOCKED/DONE ~50-50
+  // there and blocked finished runs; DONE must own "already achieved".
+  it("frames DONE as already-achieved and BLOCKED as not-already-achieved", () => {
+    const request = buildDecisionRequest({
+      goal: "Log in",
+      snapshot: loginSnapshot(),
+      recentActions: [],
+    });
+
+    expect(request.questions.operation.criteria.DONE).toContain(
+      "already fully achieved",
+    );
+    expect(request.questions.operation.criteria.BLOCKED).toContain(
+      "not already achieved",
+    );
+    expect(request.questions.operation.instructions).toContain(
+      "if the goal is already achieved on the current page, choose DONE",
+    );
+  });
+
   it("includes SELECT and a select-only target head when a select exists", () => {
     const request = buildDecisionRequest({
       goal: "Pick a country",

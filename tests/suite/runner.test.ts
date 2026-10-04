@@ -607,6 +607,54 @@ describe("runSuite — options", () => {
     );
     expect(h.mkdirs).toEqual([join(result.runDir, "steps")]);
   });
+
+  it("maxActionsPerStep overrides the suite config for every step", async () => {
+    const h = makeHarness();
+    await h.run({ maxActionsPerStep: 5 });
+
+    expect(h.steps.count).toBe(3);
+    for (const call of h.steps.calls) {
+      expect(call.config).toEqual({
+        ...SUITE_CONFIG_DEFAULTS,
+        maxActionsPerStep: 5,
+      });
+    }
+  });
+
+  it("verdictThreshold overrides the suite config for every step", async () => {
+    const h = makeHarness();
+    await h.run({ verdictThreshold: 0.95 });
+
+    expect(h.steps.count).toBe(3);
+    for (const call of h.steps.calls) {
+      expect(call.config).toEqual({
+        ...SUITE_CONFIG_DEFAULTS,
+        verdictThreshold: 0.95,
+      });
+    }
+  });
+
+  it("merges several overrides over the suite config at once", async () => {
+    const h = makeHarness({
+      suite: makeSuite({
+        config: { ...SUITE_CONFIG_DEFAULTS, continueOnFailure: true },
+      }),
+    });
+    await h.run({
+      continueOnFailure: false,
+      maxActionsPerStep: 2,
+      verdictThreshold: 0.5,
+    });
+
+    for (const call of h.steps.calls) {
+      expect(call.config).toEqual({
+        ...SUITE_CONFIG_DEFAULTS,
+        continueOnFailure: false,
+        maxActionsPerStep: 2,
+        verdictThreshold: 0.5,
+      });
+    }
+  });
 });
 
 describe("runSuite — clear_browser_state setting", () => {

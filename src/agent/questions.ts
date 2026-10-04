@@ -58,13 +58,13 @@ const OPERATION_DESCRIPTIONS: Record<Operation, string> = {
   SCROLL_DOWN: "Scroll the page down to reveal content below the viewport",
   SCROLL_UP: "Scroll the page up to reveal content above the viewport",
   WAIT: "Wait briefly for the page to finish loading or settling",
-  DONE: "The goal is fully achieved on the current page — nothing left to do",
+  DONE: "The goal is already fully achieved on the current page — nothing left to do (earlier actions may have completed it)",
   BLOCKED:
-    "The goal cannot be achieved from this page (missing elements, error states, out of scope)",
+    "The goal is impossible from this page AND not already achieved (missing elements, error states, out of scope)",
 };
 
 const OPERATION_INSTRUCTIONS =
-  "You drive a web browser toward the goal in the state. Choose the single next operation that makes the most progress.";
+  "You drive a web browser toward the goal in the state. Choose the single next operation that makes the most progress; if the goal is already achieved on the current page, choose DONE.";
 
 const TARGET_QUESTION_BY_OPERATION: Partial<
   Record<Operation, "click_target" | "type_target" | "select_target">

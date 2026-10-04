@@ -20,7 +20,7 @@ import {
   type SteelSessionOptions,
 } from "@/steel/session-manager.ts";
 import { loadSuite } from "@/suite/loader.ts";
-import type { QamlSuite } from "@/suite/schema.ts";
+import type { QamlSuite, QamlSuiteConfig } from "@/suite/schema.ts";
 import {
   type RunStepOptions,
   runStep,
@@ -106,6 +106,10 @@ export interface RunOptions {
    * storage at base_url before step 1 (pristine run) vs. keep carried state.
    */
   clearBrowserState?: boolean;
+  /** Overrides the suite's max_actions_per_step when set. */
+  maxActionsPerStep?: number;
+  /** Overrides the suite's verdict_threshold when set. */
+  verdictThreshold?: number;
   /** Progress sink (session line + one line per step). Default: console.log. */
   log?: (line: string) => void;
 }
@@ -301,10 +305,25 @@ export async function runSuite(
       : config.text
         ? createTextHelper(config.text)
         : null;
-  const continueOnFailure =
-    options.continueOnFailure ?? suite.config.continueOnFailure;
-  const clearBrowserState =
-    options.clearBrowserState ?? suite.config.clearBrowserState;
+  // Caller overrides (the CLI's run flags, the MCP tool's options) merge over
+  // the suite's own config; every step runs with the merged copy.
+  const stepConfig: QamlSuiteConfig = {
+    ...suite.config,
+    ...(options.continueOnFailure !== undefined && {
+      continueOnFailure: options.continueOnFailure,
+    }),
+    ...(options.clearBrowserState !== undefined && {
+      clearBrowserState: options.clearBrowserState,
+    }),
+    ...(options.maxActionsPerStep !== undefined && {
+      maxActionsPerStep: options.maxActionsPerStep,
+    }),
+    ...(options.verdictThreshold !== undefined && {
+      verdictThreshold: options.verdictThreshold,
+    }),
+  };
+  const continueOnFailure = stepConfig.continueOnFailure;
+  const clearBrowserState = stepConfig.clearBrowserState;
   const manager = deps.sessionManager ?? new SteelSessionManager(config.steel);
 
   const results: StepResult[] = [];
@@ -337,7 +356,7 @@ export async function runSuite(
       const result = await runStepFn({
         browser,
         step,
-        config: suite.config,
+        config: stepConfig,
         runDir,
         priorOutcomes: [...priorOutcomes],
         deps: { jev, textHelper },

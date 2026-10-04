@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "bun run index.ts",
+    "qaml": "bun run index.ts",
     "typecheck": "bunx tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

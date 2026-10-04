@@ -41,11 +41,11 @@ Behavior:
 
 ## Tasks
 
-- [ ] Implement `src/cli.ts` (commander, subcommands, exit codes, stderr
+- [x] Implement `src/cli.ts` (commander, subcommands, exit codes, stderr
   progress / stdout summary split).
-- [ ] Replace `index.ts` with the CLI entry.
-- [ ] Add the `qaml` script alias to `package.json`.
-- [ ] Update `AGENTS.md` run instructions to the CLI form.
+- [x] Replace `index.ts` with the CLI entry.
+- [x] Add the `qaml` script alias to `package.json`.
+- [x] Update `AGENTS.md` run instructions to the CLI form.
 
 ## Files
 

@@ -1,22 +1,12 @@
-import { assertSteelReachable } from "@/steel/health.ts";
-import { loadConfig } from "@/utils/config.ts";
+#!/usr/bin/env bun
+import { EXIT_ERROR, main } from "@/cli.ts";
 
-// Temporary entrypoint until the real CLI lands in stage 09: load config,
-// run the Steel health check, and print readiness.
-async function main(): Promise<void> {
-  const config = loadConfig();
-  await assertSteelReachable(config.steel.baseUrl);
-  console.log(
-    [
-      "QAML is ready.",
-      `  Steel:    ${config.steel.baseUrl} (${config.steel.mode})`,
-      `  Jev:      ${config.decisions.model} (QAML_DECISION_MODEL_API_KEY set)`,
-      `  Runs dir: ${config.runsDir}`,
-    ].join("\n"),
-  );
-}
-
-main().catch((err: unknown) => {
-  console.error(err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+// Thin entry: the CLI contract (commands, flags, output streams, exit codes)
+// lives in src/cli.ts. `bun run qaml …` and `bun run index.ts …` both land
+// here; main() returns the exit code instead of exiting so it stays testable.
+main()
+  .then((code) => process.exit(code))
+  .catch((err: unknown) => {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(EXIT_ERROR);
+  });
