@@ -1,27 +1,35 @@
 import { join } from "node:path";
 import { Command } from "commander";
+import { formatConsoleSummary, writeReport } from "@/report/report.ts";
 import { assertSteelReachable } from "@/steel/health.ts";
-import { runSuite, type SuiteResult } from "@/suite/runner.ts";
+import { loadSuite } from "@/suite/loader.ts";
+import { runSuite } from "@/suite/runner.ts";
 import { loadConfig } from "@/utils/config.ts";
 
 const DEFAULT_SUITE = join("suites", "examples", "saucedemo-login.qaml.yaml");
 
 /**
- * Live smoke test for the whole-suite runner (stage 07). Needs `bun run
- * steel:up`, QAML_DECISION_MODEL_API_KEY, and — for the example suite's login
- * step (TYPE_TEXT) — the text-helper config (QAML_TEXT_MODEL +
- * QAML_TEXT_MODEL_API_KEY). The example suite also interpolates
- * SAUCE_USERNAME/SAUCE_PASSWORD from the environment.
+ * Live smoke test for the whole-suite runner (stage 07) and the reporting
+ * stage (08). Needs `bun run steel:up`, QAML_DECISION_MODEL_API_KEY, and —
+ * for the example suite's login step (TYPE_TEXT) — the text-helper config
+ * (QAML_TEXT_MODEL + QAML_TEXT_MODEL_API_KEY). The example suite also
+ * interpolates SAUCE_USERNAME/SAUCE_PASSWORD from the environment.
  *
  * Runs the suite end-to-end: per-step progress lines stream through the
- * runner's default log callback, then this prints the totals (Jev tokens +
- * decision cycles for the WHOLE run), models, run dir, session identity, and
- * the final status. Exit code mirrors the suite status (0 only when passed).
+ * runner's default log callback, then the stage-08 console summary prints and
+ * `report.json` + `report.md` land in the run dir for eyeball inspection
+ * (steps table, expanded failures with action traces, screenshots under
+ * steps/). Exit code mirrors the suite status (0 only when passed).
  *
  * Short-circuit check (manual, per the stage-07 verification): edit the
  * example so step 2 must fail — the run stops there, step 3 prints
  * `○ open-cart — skipped`, and the status is `failed`. Pass
  * `--continue-on-failure` to run every step regardless.
+ *
+ * Reporting check (manual, per the stage-08 verification): after a run,
+ * `report.json` parses, `report.md` renders, screenshots open, and
+ * `grep -r "$STEEL_API_KEY" runs/` / `grep -r "$SAUCE_PASSWORD" runs/` are
+ * both empty.
  */
 
 interface SmokeCli {
@@ -34,7 +42,9 @@ interface SmokeCli {
 function parseCli(): SmokeCli {
   const program = new Command()
     .name("suite-smoke")
-    .description("Live smoke test for the whole-suite runner (stage 07).")
+    .description(
+      "Live smoke test for the whole-suite runner (stage 07) and reporting (stage 08).",
+    )
     .argument("[suite]", "path to a *.qaml.yaml suite file", DEFAULT_SUITE)
     .option("--base-url <url>", "override the suite's base_url")
     .option(
@@ -56,34 +66,6 @@ function parseCli(): SmokeCli {
   };
 }
 
-function printSummary(result: SuiteResult): void {
-  console.log(
-    `\n=== suite: ${result.suiteName} → ${result.status.toUpperCase()} ===`,
-  );
-  console.log(`base url: ${result.baseUrl}`);
-  console.log(
-    `models: jev ${result.jevModel} · text ${result.textModel || "(none configured)"}`,
-  );
-  console.log(
-    `started: ${result.startedAt} · duration: ${(result.durationMs / 1000).toFixed(1)}s`,
-  );
-  console.log(`run dir: ${result.runDir}`);
-  if (result.session) {
-    console.log(
-      `session: ${result.session.id} (released) — viewer ${result.session.viewerUrl}`,
-    );
-  } else {
-    console.log("session: none — session creation failed");
-  }
-  console.log(
-    `steps: ${result.steps.map((step) => `${step.stepId} ${step.status}`).join(" · ")}`,
-  );
-  if (result.error) console.log(`run error: ${result.error}`);
-  console.log(
-    `totals: ${result.totals.jevInputTokens} jev input / ${result.totals.jevOutputTokens} output tokens · ${result.totals.cycles} decision cycles`,
-  );
-}
-
 async function main(): Promise<void> {
   const cli = parseCli();
   const config = loadConfig();
@@ -92,6 +74,10 @@ async function main(): Promise<void> {
       "Text helper is not configured — set QAML_TEXT_MODEL (+ QAML_TEXT_MODEL_API_KEY) in .env; the example suite's login step needs TYPE_TEXT.",
     );
   }
+  // Load up front: an invalid suite or missing env fails fast before any
+  // Steel session is consumed, and the raw step strings feed report.md
+  // (stage 08 reports show `${VAR}` placeholders, never interpolated values).
+  const suite = await loadSuite(cli.suitePath);
   await assertSteelReachable(config.steel.baseUrl);
 
   console.log(`Running suite ${cli.suitePath} …\n`);
@@ -107,7 +93,11 @@ async function main(): Promise<void> {
     // No log callback: the runner's default (console.log) streams per-step
     // progress live — exactly what the CLI will do in stage 09.
   });
-  printSummary(result);
+
+  // Stage 08: the console summary plus durable artifacts in the run dir.
+  console.log(`\n${formatConsoleSummary(result)}`);
+  const report = await writeReport(result, { suite });
+  console.log(`report: ${report.jsonPath} · ${report.markdownPath}`);
 
   // Smoke-level assertions on top of the suite's own verdict: a real run
   // must have executed steps and aggregated non-zero cost.

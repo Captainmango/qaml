@@ -7,7 +7,7 @@
 
 ## Layout
 
-- Layout: `src/utils/` (config: env → typed `QamlConfig`, fail-fast), `src/steel/` (health, session manager), `src/browser/` (browser-use over Steel CDP: connect, snapshot, `act`, `prepareBrowserState` navigate + optional state clear), `src/agent/` (Jev decision loop: `jev` client wrapper, `snapshot` element table, `questions` speculative fan-out, `executor` op → registry action, `text` helper, `loop` cycle driver), `src/suite/` (schema, loader, `verdict` independent Jev Noul judge, `step-runner` per-step act + judge + evidence, `runner` whole-suite orchestration → `SuiteResult`: one session, ordered steps, short-circuit/skip, token+cycle totals, progress log callback, `clear_browser_state` setting for pristine runs), `src/report/`, `src/mcp/`, `suites/examples/` (`*.qaml.yaml`), `tests/` (vitest unit tests), `scripts/` (live smoke scripts), `runs/` (run artifacts, gitignored). `index.ts` is a temporary readiness entry until the real CLI lands in stage 09.
+- Layout: `src/utils/` (config: env → typed `QamlConfig`, fail-fast), `src/steel/` (health, session manager), `src/browser/` (browser-use over Steel CDP: connect, snapshot, `act`, `prepareBrowserState` navigate + optional state clear), `src/agent/` (Jev decision loop: `jev` client wrapper, `snapshot` element table, `questions` speculative fan-out, `executor` op → registry action, `text` helper, `loop` cycle driver), `src/suite/` (schema, loader, `verdict` independent Jev Noul judge, `step-runner` per-step act + judge + evidence, `runner` whole-suite orchestration → `SuiteResult`: one session, ordered steps, short-circuit/skip, token+cycle totals, progress log callback, `clear_browser_state` setting for pristine runs), `src/report/` (`writeReport` → `report.json` + `report.md` in the run dir, `formatConsoleSummary`; raw `${VAR}` step strings only, API-key redaction), `src/mcp/`, `suites/examples/` (`*.qaml.yaml`), `tests/` (vitest unit tests), `scripts/` (live smoke scripts), `runs/` (run artifacts, gitignored). `index.ts` is a temporary readiness entry until the real CLI lands in stage 09.
 
 ## Setup
 
@@ -31,7 +31,7 @@
 
 ## Tests
 
-- Tests: vitest; `vitest.config.ts` only wires up the tsconfig alias, discovery is default (`tests/**/*.test.ts`). Write unit tests in the top-level `tests/` folder, mirroring the `src/` structure (e.g. `tests/suite/loader.test.ts` for `src/suite/loader.ts`; planned: `tests/report/report.test.ts`), importing `describe`/`it`/`expect` from `"vitest"` and source via the `@/` alias. Keep tests out of `src/`. Unit tests must run fully offline — no Steel or TypeSafe calls; live smokes that need real services go in `scripts/`, not the vitest suite. Run with `bun run test` (single run) or `bun run test:watch` (watch mode).
+- Tests: vitest; `vitest.config.ts` only wires up the tsconfig alias, discovery is default (`tests/**/*.test.ts`). Write unit tests in the top-level `tests/` folder, mirroring the `src/` structure (e.g. `tests/suite/loader.test.ts` for `src/suite/loader.ts`, `tests/report/report.test.ts` for `src/report/report.ts`), importing `describe`/`it`/`expect` from `"vitest"` and source via the `@/` alias. Keep tests out of `src/`. Unit tests must run fully offline — no Steel or TypeSafe calls; live smokes that need real services go in `scripts/`, not the vitest suite. Run with `bun run test` (single run) or `bun run test:watch` (watch mode).
 
 ## Gitignore
 

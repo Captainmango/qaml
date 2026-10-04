@@ -16,7 +16,10 @@ this stage is where results become artifacts.
 `src/report/report.ts`:
 
 ```ts
-async function writeReport(result: SuiteResult): Promise<{
+async function writeReport(
+  result: SuiteResult,
+  options?: { suite?: QamlSuite }, // raw step strings for the Markdown report
+): Promise<{
   jsonPath: string;
   markdownPath: string;
 }>;
@@ -36,9 +39,9 @@ steps/<stepId>.png   # post-step screenshots (from stage 06)
 
 - Header: suite name, status (PASSED/FAILED/ERROR), base URL, Jev model +
   text-helper model, duration, timestamp, token/cycle totals.
-- Steel evidence: session id + **viewer URL** (and recording embed link if the
-  session metadata exposes one — check `steel-sdk` session fields at
-  implementation time).
+- Steel evidence: session id + **viewer URL** (checked at implementation time:
+  `steel-sdk` v0.18's `Session` exposes no recording field, so there is no
+  embed link to add).
 - Steps table: `#`, id, status, verdict probability, decision cycles,
   duration.
 - Failed/error steps expanded: expectation text (raw, pre-interpolation — see
@@ -66,20 +69,21 @@ URL.
 
 ## Tasks
 
-- [ ] Implement `writeReport` (JSON + Markdown writers).
-- [ ] Implement `formatConsoleSummary`.
-- [ ] Add offline unit tests (`src/report/report.test.ts`): fabricate a
-  `SuiteResult` (passed, failed-with-skipped, error variants, masked-secret
-  trace) and assert the JSON round-trips, the Markdown contains the key
-  sections, and **no** secret/API-key material appears.
-- [ ] Wire `writeReport` + console summary into `scripts/suite-smoke.ts` so
+- [x] Implement `writeReport` (JSON + Markdown writers).
+- [x] Implement `formatConsoleSummary`.
+- [x] Add offline unit tests (`tests/report/report.test.ts`, per the AGENTS.md
+  tests-location rule): fabricate a `SuiteResult` (passed, failed-with-skipped,
+  error variants, masked-secret trace) and assert the JSON round-trips, the
+  Markdown contains the key sections, and **no** secret/API-key material
+  appears.
+- [x] Wire `writeReport` + console summary into `scripts/suite-smoke.ts` so
   stage-07 verification regenerates real reports to inspect by eye.
 
 ## Files
 
 | Action | Path |
 | --- | --- |
-| Create | `src/report/report.ts`, `src/report/report.test.ts` |
+| Create | `src/report/report.ts`, `tests/report/report.test.ts` |
 | Modify | `scripts/suite-smoke.ts` |
 
 ## Verification
