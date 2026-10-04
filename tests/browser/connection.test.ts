@@ -11,6 +11,7 @@ import {
   type BrowserSessionLike,
   connectBrowser,
   disconnectBrowser,
+  prepareBrowserState,
   screenshot,
   snapshotState,
 } from "@/browser/connection.ts";
@@ -321,6 +322,106 @@ describe("disconnectBrowser", () => {
     await disconnectBrowser(session);
 
     expect(session.stopCalls).toBe(1);
+  });
+});
+
+describe("prepareBrowserState", () => {
+  /** Playwright-page double: records cookie clears and evaluated scripts. */
+  function fakePage() {
+    const page = {
+      clearedCookies: 0,
+      evaluations: [] as string[],
+      context() {
+        return {
+          clearCookies: async () => {
+            page.clearedCookies += 1;
+          },
+        };
+      },
+      evaluate: async (expression: string) => {
+        page.evaluations.push(expression);
+        return null;
+      },
+    };
+    return page;
+  }
+
+  function recordingRegistry(calls: string[]) {
+    return {
+      registry: {
+        execute_action: async (
+          name: string,
+          params: Record<string, unknown>,
+        ) => {
+          calls.push(`${name} ${String(params.url)}`);
+          return { error: null };
+        },
+      },
+    };
+  }
+
+  it("navigates, clears cookies and web storage, then reloads", async () => {
+    const page = fakePage();
+    const session = new FakeBrowserSession({ pages: [page] });
+    const calls: string[] = [];
+
+    await prepareBrowserState(
+      session,
+      "https://www.saucedemo.com",
+      true,
+      recordingRegistry(calls),
+    );
+
+    expect(calls).toEqual([
+      "navigate https://www.saucedemo.com",
+      "navigate https://www.saucedemo.com",
+    ]);
+    expect(page.clearedCookies).toBe(1);
+    expect(page.evaluations).toHaveLength(1);
+    expect(page.evaluations[0]).toContain("localStorage.clear()");
+    expect(page.evaluations[0]).toContain("sessionStorage.clear()");
+  });
+
+  it("only navigates when clearing is off, keeping carried state", async () => {
+    const page = fakePage();
+    const session = new FakeBrowserSession({ pages: [page] });
+    const calls: string[] = [];
+
+    await prepareBrowserState(
+      session,
+      "https://www.saucedemo.com",
+      false,
+      recordingRegistry(calls),
+    );
+
+    expect(calls).toEqual(["navigate https://www.saucedemo.com"]);
+    expect(page.clearedCookies).toBe(0);
+    expect(page.evaluations).toEqual([]);
+  });
+
+  it("throws when a navigation fails", async () => {
+    const session = new FakeBrowserSession();
+
+    await expect(
+      prepareBrowserState(session, "https://x.test", true, {
+        registry: {
+          execute_action: async () => ({ error: "net::ERR_NAME_NOT_RESOLVED" }),
+        },
+      }),
+    ).rejects.toThrow(/navigating to https:\/\/x\.test failed/);
+  });
+
+  it("throws when no page is available to reset", async () => {
+    const session = new FakeBrowserSession({ pages: [null] });
+
+    await expect(
+      prepareBrowserState(
+        session,
+        "https://x.test",
+        true,
+        recordingRegistry([]),
+      ),
+    ).rejects.toThrow(/no page to reset state on/);
   });
 });
 

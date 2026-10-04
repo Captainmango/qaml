@@ -5,17 +5,26 @@ import type {
   RunDecisionLoopOptions,
 } from "@/agent/loop.ts";
 import type {
+  SteelSessionHandle,
+  SteelSessionOptions,
+} from "@/steel/session-manager.ts";
+import type { RunStepFn } from "@/suite/runner.ts";
+import type {
   JudgeFn,
   RunDecisionLoopFn,
+  RunStepOptions,
   SaveScreenshotFn,
+  StepResult,
+  StepStatus,
 } from "@/suite/step-runner.ts";
 import type { JudgeOptions, JudgeResult, Verdict } from "@/suite/verdict.ts";
 import { systemOneResult } from "../agent/helpers.ts";
 
 /**
- * Shared fakes/builders for the stage-06 suite tests. Everything is offline:
- * scripted Noul verdicts, a scripted actor loop, a scripted judge, and a
- * recording screenshot saver.
+ * Shared fakes/builders for the stage-06/07 suite tests. Everything is
+ * offline: scripted Noul verdicts, a scripted actor loop, a scripted judge, a
+ * recording screenshot saver, a scripted step runner, and a fake Steel
+ * session manager.
  */
 
 /** A NoulResponse as the SDK would return it. */
@@ -107,4 +116,90 @@ export class RecordingScreenshot {
     if (this.fails) throw new Error("browser gone — no screenshot");
     this.paths.push(filePath);
   };
+}
+
+/**
+ * StepResult builder: sensible defaults per status (a judged verdict for
+ * passed/failed, one cycle, 1s) — override whatever the test cares about.
+ */
+export function stepResult(
+  stepId: string,
+  status: StepStatus,
+  overrides: Partial<StepResult> = {},
+): StepResult {
+  const verdict =
+    status === "passed"
+      ? { passed: true, probability: 0.9 }
+      : status === "failed"
+        ? { passed: false, probability: 0.2 }
+        : null;
+  return {
+    stepId,
+    status,
+    durationMs: 1000,
+    agent: agentResult(status === "error" ? "error" : "done", { cycles: 1 }),
+    verdict,
+    screenshotPath: null,
+    ...overrides,
+  };
+}
+
+/** Step-runner double: replays a script of StepResults, records options. */
+export class ScriptedSteps {
+  readonly calls: RunStepOptions[] = [];
+
+  constructor(private readonly results: StepResult[]) {}
+
+  get count(): number {
+    return this.calls.length;
+  }
+
+  readonly fn: RunStepFn = async (opts) => {
+    this.calls.push(opts);
+    const next = this.results[this.calls.length - 1];
+    if (!next) {
+      throw new Error(`ScriptedSteps exhausted after ${this.calls.length - 1}`);
+    }
+    return next;
+  };
+}
+
+/** SteelSessionHandle double: records releases, optionally fails them. */
+export class FakeSessionHandle implements SteelSessionHandle {
+  releaseCalls = 0;
+  /** Set to make release() throw (teardown-failure path). */
+  releaseFails: Error | null = null;
+  readonly connectUrl = "ws://localhost:3000/";
+
+  constructor(
+    readonly id = "session-1",
+    readonly viewerUrl = "http://localhost:5173/session",
+  ) {}
+
+  async release(): Promise<void> {
+    this.releaseCalls += 1;
+    if (this.releaseFails) throw this.releaseFails;
+  }
+}
+
+/**
+ * Session-manager double: hands out FakeSessionHandles, records create
+ * options, and can fail create() or every release() on demand.
+ */
+export class FakeSessionManager {
+  readonly createCalls: SteelSessionOptions[] = [];
+  readonly handles: FakeSessionHandle[] = [];
+  /** Set to make create() throw (infra-failure path). */
+  failCreate: Error | null = null;
+  /** Set to make every created handle's release() throw. */
+  failRelease: Error | null = null;
+
+  async create(opts: SteelSessionOptions = {}): Promise<SteelSessionHandle> {
+    this.createCalls.push(opts);
+    if (this.failCreate) throw this.failCreate;
+    const handle = new FakeSessionHandle(`session-${this.handles.length + 1}`);
+    if (this.failRelease) handle.releaseFails = this.failRelease;
+    this.handles.push(handle);
+    return handle;
+  }
 }

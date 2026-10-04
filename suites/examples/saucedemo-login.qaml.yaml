@@ -6,6 +6,8 @@ config:
   max_actions_per_step: 30      # Jev decision-cycle budget per step
   step_timeout_ms: 120000
   continue_on_failure: false
+  # clear_browser_state: true   # wipe cookies/storage at base_url before step 1
+                                # (off by default: state carries into the run)
   verdict_threshold: 0.7        # Jev noul probability required to pass
   operation_confidence_threshold: 0.55  # below this the loop WAITs, then BLOCKs
 session:                        # optional, forwarded to Steel
@@ -27,4 +29,7 @@ steps:
     expect: The cart badge shows 1 item.
   - id: open-cart
     instruction: Open the cart page.
-    expect: The cart page lists exactly the product that was added.
+    # Expectations must be self-contained: the judge sees only the current
+    # page plus this string, so it cannot resolve "the product that was
+    # added" — name the evidence instead.
+    expect: The cart page lists exactly one item, the Sauce Labs Backpack.

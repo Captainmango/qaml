@@ -27,6 +27,7 @@ const config: QamlSuiteConfig = {
   maxActionsPerStep: 5,
   stepTimeoutMs: 1000,
   continueOnFailure: false,
+  clearBrowserState: false,
   verdictThreshold: 0.6,
   operationConfidenceThreshold: 0.5,
 };

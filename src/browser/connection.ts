@@ -328,3 +328,50 @@ export async function screenshot(session: BrowserSessionLike): Promise<Buffer> {
   }
   return Buffer.from(base64, "base64");
 }
+
+/** The slice of playwright's Page `prepareBrowserState` needs. */
+interface ResettablePageLike {
+  context(): { clearCookies(): Promise<unknown> };
+  evaluate(expression: string): Promise<unknown>;
+}
+
+/** IIFE string — playwright evaluates string expressions, not statements. */
+const CLEAR_WEB_STORAGE_CODE =
+  "(() => { localStorage.clear(); sessionStorage.clear(); })()";
+
+async function navigateTo(
+  session: BrowserSessionLike,
+  url: string,
+  deps: ActDeps,
+): Promise<void> {
+  const result = await act(session, BROWSER_ACTIONS.navigate, { url }, deps);
+  if (result.error) {
+    throw new Error(`navigating to ${url} failed: ${result.error}`);
+  }
+}
+
+/**
+ * Prepares the browser for a run at `url`: always navigates there, and when
+ * `clear` is set also wipes every cookie plus the origin's
+ * localStorage/sessionStorage and reloads, so the run starts pristine.
+ * Clearing is a caller decision (suite `clear_browser_state` / run option,
+ * stage 07): local Steel reuses ONE warm browser across sessions, so without
+ * it a previous run's cart or login leaks in — but some suites deliberately
+ * want carried-over state. Steps within a run always share state either way.
+ */
+export async function prepareBrowserState(
+  session: BrowserSessionLike,
+  url: string,
+  clear: boolean,
+  deps: ActDeps = {},
+): Promise<void> {
+  await navigateTo(session, url, deps);
+  if (!clear) return;
+  const page = (await session.get_current_page()) as ResettablePageLike | null;
+  if (!page) {
+    throw new Error(`connected, but no page to reset state on (${url})`);
+  }
+  await page.context().clearCookies();
+  await page.evaluate(CLEAR_WEB_STORAGE_CODE);
+  await navigateTo(session, url, deps);
+}

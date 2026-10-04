@@ -94,6 +94,7 @@ ${MINIMAL_STEP_YAML}`);
       maxActionsPerStep: 5,
       stepTimeoutMs: 60_000,
       continueOnFailure: true,
+      clearBrowserState: false,
       verdictThreshold: 0.9,
       operationConfidenceThreshold: 0.6,
     });
@@ -154,6 +155,7 @@ ${MINIMAL_STEP_YAML}`);
       maxActionsPerStep: 30,
       stepTimeoutMs: 120_000,
       continueOnFailure: false,
+      clearBrowserState: false,
       verdictThreshold: 0.7,
       operationConfidenceThreshold: 0.55,
     });

@@ -21,6 +21,7 @@ interface RunOptions {
   baseUrlOverride?: string;
   runsDir?: string;             // default from config
   continueOnFailure?: boolean;  // overrides suite config
+  clearBrowserState?: boolean;  // overrides suite config
 }
 
 interface SuiteResult {
@@ -44,7 +45,13 @@ Flow:
 2. Create a Steel session (suite `session:` options applied) and connect the
    browser (stages 02–03). Session creation failure → `status: 'error'` with
    zero steps attempted.
-3. Navigate to `base_url` before step 1.
+3. Prepare the browser at `base_url` before step 1: navigate, and when the
+   `clear_browser_state` setting is on (suite config or
+   `RunOptions.clearBrowserState`, default **off** so carried cookies/storage
+   survive), clear cookies + web storage and reload (`prepareBrowserState` in
+   stage 03's connection module). Local Steel reuses ONE warm browser across
+   sessions, so clearing is what makes runs independent; suites that want
+   carried state (e.g. a login seeded earlier) keep it. The smoke opts in.
 4. For each step: run act+judge (stage 06); append the result; carry a
    one-line outcome summary forward for later steps' goal context.
 5. Short-circuit: on `failed`/`error`, mark remaining steps `skipped` unless
@@ -69,9 +76,9 @@ Invariants:
 
 ## Tasks
 
-- [ ] Implement `src/suite/runner.ts` (flow above, `finally` release, progress
+- [x] Implement `src/suite/runner.ts` (flow above, `finally` release, progress
   callback, usage aggregation).
-- [ ] Write `scripts/suite-smoke.ts`: load the example suite from stage 04 and
+- [x] Write `scripts/suite-smoke.ts`: load the example suite from stage 04 and
   run it end-to-end, printing per-step progress, totals, and the final status.
 
 ## Files

@@ -32,6 +32,13 @@ export interface QamlSuiteConfig {
   stepTimeoutMs: number;
   /** When false (default), the run short-circuits on the first failure. */
   continueOnFailure: boolean;
+  /**
+   * When true, the runner wipes cookies + web storage at base_url before
+   * step 1 (local Steel reuses one warm browser across sessions). Default
+   * false: state is kept, e.g. to reuse a login seeded by an earlier run.
+   * Steps within a run always share state either way.
+   */
+  clearBrowserState: boolean;
   /** Jev Noul probability required for an expectation to pass (stage 06). */
   verdictThreshold: number;
   /** Below this operation confidence the loop WAITs once, then BLOCKs. */
@@ -79,6 +86,7 @@ export const SUITE_CONFIG_DEFAULTS = {
   maxActionsPerStep: 30,
   stepTimeoutMs: 120_000,
   continueOnFailure: false,
+  clearBrowserState: false,
   verdictThreshold: 0.7,
   operationConfidenceThreshold: 0.55,
 } satisfies QamlSuiteConfig;
@@ -101,6 +109,9 @@ export const suiteConfigSchema = z
     continue_on_failure: z
       .boolean()
       .default(SUITE_CONFIG_DEFAULTS.continueOnFailure),
+    clear_browser_state: z
+      .boolean()
+      .default(SUITE_CONFIG_DEFAULTS.clearBrowserState),
     verdict_threshold: z
       .number()
       .min(0, probabilityMessage)
@@ -117,6 +128,7 @@ export const suiteConfigSchema = z
       maxActionsPerStep: config.max_actions_per_step,
       stepTimeoutMs: config.step_timeout_ms,
       continueOnFailure: config.continue_on_failure,
+      clearBrowserState: config.clear_browser_state,
       verdictThreshold: config.verdict_threshold,
       operationConfidenceThreshold: config.operation_confidence_threshold,
     }),
