@@ -5,6 +5,7 @@ import {
   BROWSER_ACTIONS,
   type BrowserSessionLike,
 } from "@/browser/connection.ts";
+import { delay } from "@/utils/timing.ts";
 
 /**
  * Op + target → browser-use registry action (stage 05's hands). Every call
@@ -58,16 +59,9 @@ export interface ExecuteOperationOptions {
   delayFn?: (ms: number) => Promise<void>;
 }
 
-const defaultAct: ActFn = (session, actionName, params) =>
+/** The default actFn: straight through to stage 03's `act` (shared by the loop). */
+export const defaultAct: ActFn = (session, actionName, params) =>
   act(session, actionName, params);
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    // Don't let a settle timer keep the process alive after a crash.
-    (timer as { unref?: () => void }).unref?.();
-  });
-}
 
 function outcomeFrom(result: ActionResult): ExecutionOutcome {
   if (result.error) return { ok: false, message: result.error };

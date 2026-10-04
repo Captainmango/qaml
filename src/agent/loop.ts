@@ -2,6 +2,7 @@ import type { SystemOneResult } from "@typesafe-ai/sdk";
 import {
   type ActFn,
   type DropdownOption,
+  defaultAct,
   type ExecutionOutcome,
   executeOperation,
   getDropdownOptions,
@@ -35,14 +36,14 @@ import {
   type TextHelper,
 } from "@/agent/text.ts";
 import {
-  act,
   type BrowserSessionLike,
   type BrowserSnapshot,
   snapshotState,
 } from "@/browser/connection.ts";
 import { SUITE_CONFIG_DEFAULTS } from "@/suite/schema.ts";
 import { loadConfig, loadTextConfig } from "@/utils/config.ts";
-import { errorMessage } from "@/utils/errors.ts";
+import { errorMessage, isRetryableError } from "@/utils/errors.ts";
+import { delay } from "@/utils/timing.ts";
 
 /**
  * The cycle driver (stage 05). Per cycle: ONE snapshot → ONE speculative
@@ -97,6 +98,13 @@ export interface AgentRunResult {
   jevUsage: JevUsage;
   /** Set when status === "error": what broke, with cycle context. */
   error?: string;
+  /**
+   * Set when status === "error": whether the step-level retry should run.
+   * False for permanent failures (config, HTTP 4xx, broken contracts) —
+   * retrying those would fail identically while re-executing the cycles
+   * already performed (double form submissions are a real risk).
+   */
+  retryable?: boolean;
 }
 
 /** Consecutive discarded/failed cycles tolerated before giving up. */
@@ -126,16 +134,6 @@ export interface RunDecisionLoopOptions {
   /** Operation confidence floor. Default: suite config (0.55). */
   confidenceThreshold?: number;
   deps?: DecisionLoopDeps;
-}
-
-const defaultAct: ActFn = (session, actionName, params) =>
-  act(session, actionName, params);
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    (timer as { unref?: () => void }).unref?.();
-  });
 }
 
 function defaultTextHelper(): TextHelper | null {
@@ -172,14 +170,25 @@ export async function runDecisionLoop(
   let lowConfidenceStreak = 0;
   let wastedStreak = 0;
 
-  const finish = (status: AgentRunStatus, error?: string): AgentRunResult => ({
+  const finish = (
+    status: AgentRunStatus,
+    error?: string,
+    retryable?: boolean,
+  ): AgentRunResult => ({
     status,
     actions,
     cycles,
     durationMs: Math.max(0, now() - startedAt),
     jevUsage: { ...jevUsage },
     ...(error !== undefined && { error }),
+    ...(retryable !== undefined && { retryable }),
   });
+
+  // Error exit with retry classification for the step-level retry: a thrown
+  // underlying error is classified (network/timeout/5xx → retry; HTTP 4xx →
+  // permanent); no underlying error means a deterministic config problem.
+  const fail = (message: string, err?: unknown): AgentRunResult =>
+    finish("error", message, err === undefined ? false : isRetryableError(err));
 
   try {
     for (;;) {
@@ -217,9 +226,9 @@ export async function runDecisionLoop(
       try {
         page = buildPageSnapshot(await snapshotFn(opts.browser));
       } catch (err) {
-        return finish(
-          "error",
+        return fail(
           `snapshot failed on cycle ${cycles}: ${errorMessage(err)}`,
+          err,
         );
       }
       if (page.truncated) entry.snapshotTruncated = true;
@@ -237,9 +246,9 @@ export async function runDecisionLoop(
         addJevUsage(jevUsage, interpreted.usage);
         decision = interpreted.decision;
       } catch (err) {
-        return finish(
-          "error",
+        return fail(
           `Jev decision failed on cycle ${cycles}: ${errorMessage(err)}`,
+          err,
         );
       }
 
@@ -303,8 +312,8 @@ export async function runDecisionLoop(
 
       if (decision.operation === "TYPE_TEXT" && element) {
         if (!textHelper) {
-          return finish(
-            "error",
+          // Deterministic config error — classified permanent by `fail`.
+          return fail(
             "Jev chose TYPE_TEXT but no text helper is configured — set QAML_TEXT_MODEL and QAML_TEXT_MODEL_API_KEY (see .env.example)",
           );
         }
@@ -322,9 +331,9 @@ export async function runDecisionLoop(
           // Raw secrets must never reach traces or reports.
           entry.text = element.password ? MASKED_TEXT : generated;
         } catch (err) {
-          return finish(
-            "error",
+          return fail(
             `text helper failed on cycle ${cycles}: ${errorMessage(err)}`,
+            err,
           );
         }
       }
@@ -366,9 +375,9 @@ export async function runDecisionLoop(
               }),
             );
           } catch (err) {
-            return finish(
-              "error",
+            return fail(
               `Jev option decision failed on cycle ${cycles}: ${errorMessage(err)}`,
+              err,
             );
           }
           addJevUsage(jevUsage, toJevUsage(response.usage));
@@ -410,7 +419,7 @@ export async function runDecisionLoop(
     }
   } catch (err) {
     // Safety net — the loop contract is to never throw at the runner.
-    return finish("error", `decision loop crashed: ${errorMessage(err)}`);
+    return fail(`decision loop crashed: ${errorMessage(err)}`, err);
   }
 }
 

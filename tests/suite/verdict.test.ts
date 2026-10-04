@@ -250,6 +250,32 @@ describe("judgeExpectation", () => {
     expect(jev.count).toBe(JUDGE_ATTEMPTS);
   });
 
+  it("fails immediately on a permanent Jev failure (4xx auth/quota)", async () => {
+    const quota = Object.assign(new Error("quota exceeded"), { status: 429 });
+    const jev = new ScriptedJev([quota, verdictResult(0.99)]);
+    let snapshots = 0;
+
+    const result = await judgeExpectation({
+      browser: session,
+      expectation: "e",
+      deps: {
+        jev,
+        snapshotFn: async () => {
+          snapshots += 1;
+          return inventoryPage();
+        },
+      },
+    });
+
+    expect(result.verdict).toBeNull();
+    expect(result.error).toMatch(
+      /judge failed after 1 attempt.*quota exceeded/s,
+    );
+    // No retry, no second snapshot — a 4xx would fail identically.
+    expect(jev.count).toBe(1);
+    expect(snapshots).toBe(1);
+  });
+
   it("treats visible-text extraction as best-effort", async () => {
     const jev = new ScriptedJev([verdictResult(0.9)]);
 

@@ -1,5 +1,6 @@
 import Steel from "steel-sdk";
 import type { QamlSteelConfig } from "@/utils/config.ts";
+import { delay } from "@/utils/timing.ts";
 
 /** Hard session cap applied server-side on every create. */
 const DEFAULT_SESSION_TIMEOUT_MS = 15 * 60 * 1000;
@@ -38,8 +39,14 @@ export interface SteelClientLike {
 
 export interface SteelSessionManagerDeps {
   client?: SteelClientLike;
-  /** Default true. Tests pass false so process listeners don't accumulate. */
+  /**
+   * Default true: the manager joins the process-wide exit-hook registry
+   * (hooks themselves are registered once per process, never per instance).
+   * Tests pass false to keep the shared process hooks untouched.
+   */
   registerExitHooks?: boolean;
+  /** releaseAll failure sink. Default: console.error. */
+  logger?: (line: string) => void;
 }
 
 /** Masks the `apiKey` query param in a (cloud connect) URL for safe logging. */
@@ -91,12 +98,43 @@ function wrapSteelError(
   return new Error(`Steel error while ${action}: ${message}`, { cause: err });
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    // Don't let a losing shutdown-race timer keep the process alive.
-    (timer as { unref?: () => void }).unref?.();
+/**
+ * Process-wide exit-hook registry. runSuite builds a manager per run, so
+ * per-instance hooks would accumulate `exit`/signal listeners in a
+ * long-lived process (the MCP server) until Node warns — instead the hooks
+ * are registered ONCE per process and fan out to every manager currently
+ * holding a live handle (managers join on first create, leave at zero).
+ */
+const hookedManagers = new Set<SteelSessionManager>();
+let exitHooksRegistered = false;
+
+function releaseHookedManagers(): Promise<unknown[]> {
+  return Promise.allSettled(
+    [...hookedManagers].map((manager) => manager.releaseAll()),
+  );
+}
+
+function registerExitHooksOnce(): void {
+  if (exitHooksRegistered) return;
+  exitHooksRegistered = true;
+  process.on("exit", () => {
+    // The event loop is already draining, so async releases may not
+    // complete — the server-side session timeout is the real backstop.
+    void releaseHookedManagers();
   });
+  for (const [signal, exitCode] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ] as const) {
+    process.on(signal, () => {
+      void Promise.race([
+        releaseHookedManagers(),
+        delay(EXIT_RELEASE_TIMEOUT_MS),
+      ])
+        .catch(() => {})
+        .finally(() => process.exit(exitCode));
+    });
+  }
 }
 
 /**
@@ -109,6 +147,8 @@ function delay(ms: number): Promise<void> {
 export class SteelSessionManager {
   private readonly client: SteelClientLike;
   private readonly liveHandles = new Set<SteelSessionHandle>();
+  private readonly logger: (line: string) => void;
+  private readonly exitHooked: boolean;
 
   constructor(
     private readonly config: QamlSteelConfig,
@@ -122,7 +162,9 @@ export class SteelSessionManager {
         // a stray STEEL_API_KEY env var.
         steelAPIKey: config.mode === "cloud" ? config.apiKey : null,
       });
-    if (deps.registerExitHooks ?? true) this.registerExitHooks();
+    this.logger = deps.logger ?? ((line) => console.error(line));
+    this.exitHooked = deps.registerExitHooks ?? true;
+    if (this.exitHooked) registerExitHooksOnce();
   }
 
   async create(opts: SteelSessionOptions = {}): Promise<SteelSessionHandle> {
@@ -149,6 +191,7 @@ export class SteelSessionManager {
 
     const handle = this.buildHandle(session);
     this.liveHandles.add(handle);
+    if (this.exitHooked) hookedManagers.add(this);
     return handle;
   }
 
@@ -166,7 +209,7 @@ export class SteelSessionManager {
           result.reason instanceof Error
             ? result.reason.message
             : String(result.reason);
-        console.error(`QAML: failed to release a Steel session — ${reason}`);
+        this.logger(`QAML: failed to release a Steel session — ${reason}`);
       }
     }
   }
@@ -204,6 +247,8 @@ export class SteelSessionManager {
         }
         released = true;
         this.liveHandles.delete(handle);
+        // Nothing left to protect — leave the process exit-hook registry.
+        if (this.liveHandles.size === 0) hookedManagers.delete(this);
       },
     };
     return handle;
@@ -247,23 +292,5 @@ export class SteelSessionManager {
     url.hostname = base.hostname;
     url.port = base.port;
     return url.toString();
-  }
-
-  private registerExitHooks(): void {
-    process.on("exit", () => {
-      // The event loop is already draining, so async releases may not
-      // complete — the server-side session timeout is the real backstop.
-      void this.releaseAll();
-    });
-    for (const [signal, exitCode] of [
-      ["SIGINT", 130],
-      ["SIGTERM", 143],
-    ] as const) {
-      process.on(signal, () => {
-        void Promise.race([this.releaseAll(), delay(EXIT_RELEASE_TIMEOUT_MS)])
-          .catch(() => {})
-          .finally(() => process.exit(exitCode));
-      });
-    }
   }
 }

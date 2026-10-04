@@ -9,6 +9,7 @@ import {
   type StepResult,
   stepOutcomeLine,
 } from "@/suite/step-runner.ts";
+import type { JudgeResult } from "@/suite/verdict.ts";
 import {
   agentResult,
   judgeResult,
@@ -226,6 +227,77 @@ describe("runStep — actor infra error retries once", () => {
   });
 });
 
+describe("runStep — retry classification and step budget", () => {
+  it("does not retry a permanent actor error (config/4xx/contract)", async () => {
+    const h = {
+      loop: new ScriptedLoop([
+        agentResult("error", {
+          error: "no text helper is configured",
+          retryable: false,
+        }),
+      ]),
+      judge: new ScriptedJudge([]),
+      shot: new RecordingScreenshot(),
+    };
+
+    const result = await wire(h);
+
+    expect(h.loop.count).toBe(1); // no retry — it would fail identically
+    expect(h.judge.count).toBe(0);
+    expect(result.status).toBe("error");
+  });
+
+  it("gives the retry the step's remaining budget, not a fresh timeout", async () => {
+    let t = 0;
+    const now = (): number => {
+      const current = t;
+      t += 100;
+      return current;
+    };
+    const h = {
+      loop: new ScriptedLoop([
+        agentResult("error", { error: "jev down" }),
+        agentResult("done"),
+      ]),
+      judge: new ScriptedJudge([
+        judgeResult({ passed: true, probability: 0.8 }),
+      ]),
+      shot: new RecordingScreenshot(),
+    };
+
+    const result = await wire(h, { deps: { now } });
+
+    expect(h.loop.count).toBe(2);
+    // Start at 0, one now() read (100) before the retry: 1000 - 100 = 900.
+    expect(h.loop.calls[1]?.timeoutMs).toBe(900);
+    expect(result.status).toBe("passed");
+  });
+
+  it("maps a judge that blows the remaining step budget to an error", async () => {
+    const h = {
+      loop: new ScriptedLoop([agentResult("done")]),
+      judge: new ScriptedJudge([]),
+      shot: new RecordingScreenshot(),
+    };
+    // A judge that never settles inside the (tiny) step budget.
+    const slowJudge = async () =>
+      new Promise<JudgeResult>((resolve) =>
+        setTimeout(
+          () => resolve(judgeResult({ passed: true, probability: 0.99 })),
+          100,
+        ),
+      );
+
+    const result = await wire(h, {
+      config: { ...config, stepTimeoutMs: 10 },
+      deps: { judgeFn: slowJudge },
+    });
+
+    expect(result.status).toBe("error");
+    expect(result.verdict).toBeNull();
+  });
+});
+
 describe("runStep — evidence is best-effort", () => {
   it("keeps the real status when the screenshot fails", async () => {
     const shot = new RecordingScreenshot();
@@ -282,7 +354,8 @@ describe("runStep — goal context, config, and timing", () => {
 
     const result = await wire(h, { deps: { now } });
 
-    // now() is read exactly twice: start (0) and end (1000).
-    expect(result.durationMs).toBe(1000);
+    // now() is read for the start, the two budget checks (evidence, judge),
+    // and the end — the duration spans start to end regardless.
+    expect(result.durationMs).toBe(3000);
   });
 });

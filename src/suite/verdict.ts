@@ -26,7 +26,7 @@ import {
 } from "@/browser/connection.ts";
 import { SUITE_CONFIG_DEFAULTS } from "@/suite/schema.ts";
 import { loadConfig } from "@/utils/config.ts";
-import { errorMessage } from "@/utils/errors.ts";
+import { errorMessage, isRetryableError } from "@/utils/errors.ts";
 
 /**
  * The judge (stage 06): an INDEPENDENT verdict on whether a step's expectation
@@ -44,10 +44,12 @@ import { errorMessage } from "@/utils/errors.ts";
  *   probability (P(expectation is TRUE)) is recorded raw — reports show it and
  *   the uncertain band stays visible instead of hiding behind a boolean.
  * - `passed = probability >= threshold` (default 0.7, suite-configurable).
- * - An infra failure (snapshot/Jev) is retried ONCE, then surfaced as
- *   `verdict: null` + `error` so the runner can mark the step `error` — never
- *   an honest `failed`. Visible-text extraction is best-effort: missing text
- *   must not sink a verdict the URL/title/elements can still decide.
+ * - A transient infra failure (snapshot read, Jev network/timeout/5xx) is
+ *   retried ONCE, then surfaced as `verdict: null` + `error` so the runner
+ *   can mark the step `error` — never an honest `failed`. Permanent failures
+ *   (Jev 4xx — auth/quota) fail immediately: a retry would re-ask
+ *   identically. Visible-text extraction is best-effort: missing text must
+ *   not sink a verdict the URL/title/elements can still decide.
  */
 
 export interface Verdict {
@@ -193,8 +195,9 @@ async function defaultVisibleText(
 
 /**
  * Observes the page freshly and returns an independent, thresholded verdict.
- * Never throws: a transient snapshot/Jev failure is retried once, then lands
- * in `{ verdict: null, error }` so the caller reports `error`, not `failed`.
+ * Never throws: a transient snapshot/Jev failure is retried once (permanent
+ * ones fail at once), then lands in `{ verdict: null, error }` so the caller
+ * reports `error`, not `failed`.
  */
 export async function judgeExpectation(
   opts: JudgeOptions,
@@ -210,17 +213,18 @@ export async function judgeExpectation(
 
   let snapshot: PageSnapshot | null = null;
   let lastError: unknown;
+  let attempts = 0;
   for (let attempt = 0; attempt < JUDGE_ATTEMPTS; attempt += 1) {
     try {
-      // Fresh observation — never the actor's last state.
-      snapshot = buildPageSnapshot(await snapshotFn(opts.browser));
-      // Best-effort page text: a failed probe leaves url/title/elements to judge.
-      let visibleText = "";
-      try {
-        visibleText = await visibleTextFn(opts.browser);
-      } catch {
-        visibleText = "";
-      }
+      // Fresh observation — never the actor's last state. The snapshot and
+      // the text probe read the same settled page and are independent, so
+      // they run concurrently; the probe stays best-effort (a failed one
+      // leaves url/title/elements to judge).
+      const [rawSnapshot, visibleText] = await Promise.all([
+        snapshotFn(opts.browser),
+        visibleTextFn(opts.browser).catch(() => ""),
+      ]);
+      snapshot = buildPageSnapshot(rawSnapshot);
       const response = await jev.systemOne(
         buildVerdictRequest({
           expectation: opts.expectation,
@@ -236,6 +240,10 @@ export async function judgeExpectation(
       };
     } catch (err) {
       lastError = err;
+      attempts = attempt + 1;
+      // A permanent failure (Jev 4xx — auth/quota) fails immediately:
+      // retrying would re-ask the identical question.
+      if (!isRetryableError(err)) break;
     }
   }
 
@@ -243,6 +251,6 @@ export async function judgeExpectation(
     verdict: null,
     jevUsage: { ...jevUsage },
     snapshot,
-    error: `judge failed after ${JUDGE_ATTEMPTS} attempts: ${errorMessage(lastError)}`,
+    error: `judge failed after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${errorMessage(lastError)}`,
   };
 }

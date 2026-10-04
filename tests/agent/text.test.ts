@@ -69,6 +69,8 @@ describe("createTextHelper", () => {
     const body = requestBody(call as RecordedCall);
     expect(body.model).toBe("helper-small");
     expect(body.temperature).toBe(0);
+    // Server-side JSON enforcement; the fence-slicing parser is the fallback.
+    expect(body.response_format).toEqual({ type: "json_object" });
     const messages = body.messages as Array<Record<string, string>>;
     expect(messages[0]?.role).toBe("system");
     // The user message carries the goal + field context as JSON.
@@ -86,28 +88,40 @@ describe("createTextHelper", () => {
     await expect(helper.generateText(input)).resolves.toBe("secret_sauce");
   });
 
-  it("retries once when the reply breaks the { text } contract", async () => {
+  it("fails immediately when the reply breaks the { text } contract", async () => {
+    // A contract violation is permanent: at temperature 0 a retry returns
+    // the same bad reply, so no second request is spent.
     const fetcher = fakeFetch([
       chatResponse('{"value": "wrong shape"}'),
       chatResponse('{"text": "standard_user"}'),
     ]);
     const helper = createTextHelper(config, { fetchImpl: fetcher.impl });
 
-    await expect(helper.generateText(input)).resolves.toBe("standard_user");
-    expect(fetcher.calls).toHaveLength(2);
+    await expect(helper.generateText(input)).rejects.toThrow(
+      /failed after 1 attempt — reply is not \{ "text": string \}/,
+    );
+    expect(fetcher.calls).toHaveLength(1);
   });
 
-  it("fails after the retry, naming the helper", async () => {
-    const fetcher = fakeFetch([
-      chatResponse("not json at all"),
-      chatResponse("still not json"),
-    ]);
+  it("fails immediately on an unparseable reply, naming the helper", async () => {
+    const fetcher = fakeFetch([chatResponse("not json at all")]);
     const helper = createTextHelper(config, { fetchImpl: fetcher.impl });
 
     await expect(helper.generateText(input)).rejects.toThrow(
-      /text helper \(helper-small\) failed after 2 attempts/,
+      /text helper \(helper-small\) failed after 1 attempt/,
     );
-    expect(fetcher.calls).toHaveLength(2);
+    expect(fetcher.calls).toHaveLength(1);
+  });
+
+  it("does not retry HTTP 4xx (auth/quota/bad request)", async () => {
+    const fetcher = fakeFetch([
+      new Response("unauthorized", { status: 401 }),
+      chatResponse('{"text": "unreachable"}'),
+    ]);
+    const helper = createTextHelper(config, { fetchImpl: fetcher.impl });
+
+    await expect(helper.generateText(input)).rejects.toThrow(/HTTP 401/);
+    expect(fetcher.calls).toHaveLength(1);
   });
 
   it("retries transient HTTP failures and surfaces the status when they persist", async () => {

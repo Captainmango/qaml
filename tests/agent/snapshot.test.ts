@@ -11,13 +11,15 @@ import {
 import { makeBrowserSnapshot, makeSnapshotElement } from "./helpers.ts";
 
 describe("buildPageSnapshot", () => {
-  it("keeps visible elements only, sorted by index, counting the omitted", () => {
+  it("keeps visible elements only, in snapshot order, counting the omitted", () => {
+    // Input honours the BrowserSnapshot contract: index-sorted by stage 03's
+    // snapshotState at extraction; filtering must preserve that order.
     const snapshot = buildPageSnapshot(
       makeBrowserSnapshot({
         elements: [
-          makeSnapshotElement(9, { tag: "a", text: "Products" }),
           makeSnapshotElement(3, { isVisible: false }),
           makeSnapshotElement(5),
+          makeSnapshotElement(9, { tag: "a", text: "Products" }),
         ],
       }),
     );

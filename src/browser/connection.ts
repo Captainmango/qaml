@@ -6,6 +6,7 @@ import {
 } from "browser-use/browser";
 import { Controller } from "browser-use/controller";
 import type { SteelSessionHandle } from "@/steel/session-manager.ts";
+import { delay, withTimeout } from "@/utils/timing.ts";
 
 /**
  * browser-use over Steel CDP. This module is the ONLY place that knows how
@@ -46,6 +47,15 @@ import type { SteelSessionHandle } from "@/steel/session-manager.ts";
  *   already verifies the live value via the element locator; to read live
  *   properties yourself, use the `evaluate` action.
  * - `input_text` clears the field by default (`clear: false` appends).
+ * - Click download-wait: BrowserProfile's constructor always populates
+ *   `downloads_path` (ensureDefaultDownloadsPath), so `_click_element_node`
+ *   wraps EVERY click in `page.waitForEvent("download", { timeout: 5000 })`
+ *   — ~5s of dead time per click when no download starts (measured ~60% of a
+ *   suite's wall time; A/B: ~5.1s → ~0.2s per click). QAML never downloads
+ *   files, so the default session factory nulls the path after construction
+ *   and the wait is skipped (snapshots/typing/scroll/evaluate don't read
+ *   it). Re-check on browser-use upgrades; if a suite ever needs to verify
+ *   a download, bring the wait back as a per-suite toggle, not the default.
  * - `take_screenshot` returns a 4px placeholder (not null) on
  *   about:blank/new-tab pages.
  * - Action-name drift vs. docs: names below were confirmed against the
@@ -120,32 +130,19 @@ const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_CONNECT_RETRY_DELAY_MS = 500;
 const PAGE_READY_POLL_MS = 100;
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    // Don't let a losing timeout-race timer keep the process alive.
-    (timer as { unref?: () => void }).unref?.();
-  });
-}
-
-/** Rejects with `message` after `ms` if the promise hasn't settled. */
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  message: string,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(message)), ms);
-        (timer as { unref?: () => void }).unref?.();
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+/**
+ * The production session factory. Nulls the profile's auto-populated
+ * `downloads_path` so clicks skip the unconditional 5s download wait (see
+ * the module header's click download-wait quirk). Re-check on upgrades.
+ */
+function createDefaultSession(init: BrowserSessionInit): BrowserSessionLike {
+  const session = new BrowserSession(init);
+  (
+    session.browser_profile as unknown as {
+      options: { downloads_path: string | null };
+    }
+  ).options.downloads_path = null;
+  return session;
 }
 
 /**
@@ -157,9 +154,8 @@ async function withTimeout<T>(
 export async function connectBrowser(
   handle: SteelSessionHandle,
   deps: ConnectBrowserDeps = {},
-): Promise<BrowserSession> {
-  const createSession =
-    deps.createSession ?? ((init) => new BrowserSession(init));
+): Promise<BrowserSessionLike> {
+  const createSession = deps.createSession ?? createDefaultSession;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
   const retryDelayMs = deps.retryDelayMs ?? DEFAULT_CONNECT_RETRY_DELAY_MS;
   const deadline = Date.now() + timeoutMs;
@@ -185,9 +181,7 @@ export async function connectBrowser(
       if (!page) {
         throw new Error("connected, but no usable page/target appeared");
       }
-      // The fake-session type is a lie tests tell on purpose; production
-      // always gets a real BrowserSession.
-      return session as BrowserSession;
+      return session;
     } catch (err) {
       lastError = err;
       const remainingMs = deadline - Date.now();
@@ -358,6 +352,12 @@ async function navigateTo(
  * stage 07): local Steel reuses ONE warm browser across sessions, so without
  * it a previous run's cart or login leaks in — but some suites deliberately
  * want carried-over state. Steps within a run always share state either way.
+ *
+ * Clearing costs two full page loads (navigate → clear → reload: storage
+ * clearing needs the origin committed, and the app must reboot pristine). A
+ * cheaper first load is NOT available in browser-use 0.8.0: the `navigate`
+ * action schema has no `wait_until`, and the underlying `navigate_to` always
+ * waits for a stable network regardless — re-check on upgrades.
  */
 export async function prepareBrowserState(
   session: BrowserSessionLike,

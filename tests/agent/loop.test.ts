@@ -369,8 +369,28 @@ describe("runDecisionLoop — error handling", () => {
     expect(result.error).toMatch(
       /Jev decision failed on cycle 2.*connection refused/s,
     );
+    // A network failure is transient — the step retry is allowed.
+    expect(result.retryable).toBe(true);
     expect(result.actions).toHaveLength(1);
     expect(act.names).toEqual(["click_element_by_index"]);
+  });
+
+  it("marks Jev 4xx failures permanent — the step retry must not re-run", async () => {
+    const unauthorized = Object.assign(new Error("invalid api key"), {
+      status: 401,
+    });
+    const jev = new ScriptedJev([unauthorized]);
+    const { deps } = harness({ jev });
+
+    const result = await runDecisionLoop({
+      browser: session,
+      goal: GOAL,
+      deps,
+    });
+
+    expect(result.status).toBe("error");
+    expect(result.error).toMatch(/Jev decision failed on cycle 1/);
+    expect(result.retryable).toBe(false);
   });
 
   it("returns error when the snapshot fails", async () => {
@@ -390,6 +410,8 @@ describe("runDecisionLoop — error handling", () => {
     expect(result.error).toMatch(
       /snapshot failed on cycle 2.*cdp connection lost/s,
     );
+    // Snapshot reads are transient — the step retry is allowed.
+    expect(result.retryable).toBe(true);
     expect(result.actions).toHaveLength(1);
   });
 
@@ -407,6 +429,8 @@ describe("runDecisionLoop — error handling", () => {
 
     expect(result.status).toBe("error");
     expect(result.error).toMatch(/QAML_TEXT_MODEL/);
+    // A deterministic config error — retrying would fail identically.
+    expect(result.retryable).toBe(false);
     expect(act.calls).toEqual([]);
     expect(result.actions).toHaveLength(0);
   });
@@ -426,6 +450,8 @@ describe("runDecisionLoop — error handling", () => {
 
     expect(result.status).toBe("error");
     expect(result.error).toMatch(/text helper failed on cycle 1.*HTTP 502/s);
+    // A 5xx-class failure (no permanent marker on the cause chain) retries.
+    expect(result.retryable).toBe(true);
   });
 
   it("never throws — even an exploding snapshotFn lands in status error", async () => {

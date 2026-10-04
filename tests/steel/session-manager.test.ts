@@ -246,6 +246,27 @@ describe("SteelSessionManager.releaseAll", () => {
     await expect(manager.releaseAll()).resolves.toBeUndefined();
     expect(errorSpy).toHaveBeenCalledOnce();
   });
+
+  it("routes failure logs through the injected logger when given", async () => {
+    const client = new FakeSteelClient();
+    const lines: string[] = [];
+    const manager = new SteelSessionManager(LOCAL_CONFIG, {
+      client,
+      registerExitHooks: false,
+      logger: (line) => lines.push(line),
+    });
+    client.releaseImpl = async () => {
+      throw new Steel.InternalServerError(500, {}, "boom", {});
+    };
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await manager.create();
+    await manager.releaseAll();
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/failed to release a Steel session/);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("process exit hooks", () => {
@@ -280,6 +301,23 @@ describe("process exit hooks", () => {
 
       await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(130));
       expect(client.releasedIds).toEqual(["session-123"]);
+
+      // Once per process, not per instance: a second manager (e.g. the next
+      // runSuite in a long-lived MCP process) adds no further listeners.
+      const counts = {
+        exit: process.listenerCount("exit"),
+        sigint: process.listenerCount("SIGINT"),
+        sigterm: process.listenerCount("SIGTERM"),
+      };
+      const second = new SteelSessionManager(LOCAL_CONFIG, {
+        client: new FakeSteelClient(),
+      });
+      await second.create();
+      expect(process.listenerCount("exit")).toBe(counts.exit);
+      expect(process.listenerCount("SIGINT")).toBe(counts.sigint);
+      expect(process.listenerCount("SIGTERM")).toBe(counts.sigterm);
+      // Leave no live handle behind in the shared process registry.
+      await second.releaseAll();
     } finally {
       for (const fn of added.exit) process.removeListener("exit", fn);
       for (const fn of added.sigint) process.removeListener("SIGINT", fn);

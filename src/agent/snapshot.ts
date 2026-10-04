@@ -124,11 +124,13 @@ function toAgentElement(element: SnapshotElement): AgentElement {
  * capped + classified table out. Pure — no browser access, so the "atomic
  * per cycle" rule is the loop's job (one snapshotState() feeding both the
  * question and target validation).
+ *
+ * Input arrives index-sorted (the BrowserSnapshot contract — snapshotState
+ * sorts at extraction), so filtering preserves order and only the cap path
+ * re-sorts after preferring in-viewport elements.
  */
 export function buildPageSnapshot(snapshot: BrowserSnapshot): PageSnapshot {
-  const visible = snapshot.elements
-    .filter((element) => element.isVisible)
-    .sort((a, b) => a.index - b.index);
+  const visible = snapshot.elements.filter((element) => element.isVisible);
   const hiddenCount = snapshot.elements.length - visible.length;
 
   let kept = visible;
