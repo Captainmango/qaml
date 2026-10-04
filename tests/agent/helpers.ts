@@ -11,12 +11,12 @@ import type { TextHelper, TextHelperInput } from "@/agent/text.ts";
 import type { BrowserSnapshot, SnapshotElement } from "@/browser/connection.ts";
 
 /**
- * Shared fakes/builders for the stage-05 agent tests. Everything here is
+ * Shared fakes/builders for the agent tests. Everything here is
  * offline: scripted Jev responses, recorded registry actions, a fake clock,
  * and canned browser snapshots.
  */
 
-/** Stage 03's attribute fallback order for the best-effort accessible name. */
+/** The extraction's attribute fallback order for the best-effort accessible name. */
 const NAME_ATTRIBUTES = [
   "aria-label",
   "placeholder",
@@ -31,7 +31,7 @@ export function makeSnapshotElement(
   overrides: Partial<SnapshotElement> = {},
 ): SnapshotElement {
   const attributes = (overrides.attributes ?? {}) as Record<string, string>;
-  // Derive like stage 03's toSnapshotElement unless the test overrides them.
+  // Derive like the real toSnapshotElement unless the test overrides them.
   const name =
     overrides.name !== undefined
       ? overrides.name

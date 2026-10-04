@@ -19,7 +19,7 @@ import {
 } from "@/agent/snapshot.ts";
 
 /**
- * The speculative fan-out (stage 05): ONE `systemOne` request per decision
+ * The speculative fan-out: ONE `systemOne` request per decision
  * cycle carrying the operation question plus every plausible target head at
  * once — jev-ultrafast's "two decisions, one network round trip". Code only
  * reads the target head matching the chosen operation.

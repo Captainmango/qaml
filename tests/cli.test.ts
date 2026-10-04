@@ -21,7 +21,7 @@ import type { QamlConfig } from "@/utils/config.ts";
 import { stepResult } from "./suite/helpers.ts";
 
 /**
- * Offline stage-09 tests: every CLI seam (config, Steel health, loader,
+ * Offline tests: every CLI seam (config, Steel health, loader,
  * runner, report writer, stdout/stderr) is injected, so no Steel, TypeSafe,
  * network, or filesystem access happens. The contract under test is the
  * behavior assistants rely on: exit codes 0/1/2, progress on stderr, and a

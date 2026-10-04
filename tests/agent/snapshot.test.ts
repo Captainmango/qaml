@@ -12,7 +12,7 @@ import { makeBrowserSnapshot, makeSnapshotElement } from "./helpers.ts";
 
 describe("buildPageSnapshot", () => {
   it("keeps visible elements only, in snapshot order, counting the omitted", () => {
-    // Input honours the BrowserSnapshot contract: index-sorted by stage 03's
+    // Input honours the BrowserSnapshot contract: index-sorted by
     // snapshotState at extraction; filtering must preserve that order.
     const snapshot = buildPageSnapshot(
       makeBrowserSnapshot({

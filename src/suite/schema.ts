@@ -9,8 +9,8 @@ import { z } from "zod";
  *
  * - YAML keys are snake_case (the human-writable format); the parsed TS types
  *   are camelCase like the rest of `src/` — the transforms rename as they
- *   validate. `QamlSessionConfig` maps 1:1 onto the stage-02
- *   `SteelSessionOptions` so the runner can forward it unchanged.
+ *   validate. `QamlSessionConfig` maps 1:1 onto `SteelSessionOptions` so the
+ *   runner can forward it unchanged.
  * - `${VAR}` interpolation is NOT done here; the loader (loader.ts) validates
  *   first, then interpolates `instruction`/`expect` from the environment.
  *   Step values therefore carry both the interpolated strings (for the actor
@@ -26,9 +26,9 @@ const STEP_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export interface QamlSuiteConfig {
-  /** Jev decision-cycle budget per step (stage 05). */
+  /** Jev decision-cycle budget per step. */
   maxActionsPerStep: number;
-  /** Hard cap for one step, act + judge (stage 06). */
+  /** Hard cap for one step, act + judge. */
   stepTimeoutMs: number;
   /** When false (default), the run short-circuits on the first failure. */
   continueOnFailure: boolean;
@@ -39,7 +39,7 @@ export interface QamlSuiteConfig {
    * Steps within a run always share state either way.
    */
   clearBrowserState: boolean;
-  /** Jev Noul probability required for an expectation to pass (stage 06). */
+  /** Jev Noul probability required for an expectation to pass. */
   verdictThreshold: number;
   /** Below this operation confidence the loop WAITs once, then BLOCKs. */
   operationConfidenceThreshold: number;
@@ -47,8 +47,8 @@ export interface QamlSuiteConfig {
 
 /**
  * Optional `session:` block, forwarded to Steel. `useProxy`/`solveCaptcha`
- * are Steel Cloud-only — the schema accepts them and the stage-02 session
- * manager rejects them when the configured instance is local.
+ * are Steel Cloud-only — the schema accepts them and the session manager
+ * rejects them when the configured instance is local.
  */
 export interface QamlSessionConfig {
   timeoutMs?: number;
@@ -94,7 +94,7 @@ export const SUITE_CONFIG_DEFAULTS = {
 const positiveIntMessage = "Must be a positive whole number";
 const probabilityMessage = "Must be a probability between 0 and 1";
 
-export const suiteConfigSchema = z
+const suiteConfigSchema = z
   .strictObject({
     max_actions_per_step: z
       .number()
@@ -134,7 +134,7 @@ export const suiteConfigSchema = z
     }),
   );
 
-export const sessionConfigSchema = z
+const sessionConfigSchema = z
   .strictObject({
     timeout_ms: z
       .number()
@@ -163,7 +163,7 @@ export const sessionConfigSchema = z
     }),
   );
 
-export const stepSchema = z
+const stepSchema = z
   .strictObject({
     id: z
       .string()

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { SystemOneLike } from "@/agent/jev.ts";
+import { type SystemOneLike, zeroJevUsage } from "@/agent/jev.ts";
 import {
   type AgentRunResult,
   type RunDecisionLoopOptions,
@@ -19,8 +19,8 @@ import { errorMessage } from "@/utils/errors.ts";
 import { withTimeout } from "@/utils/timing.ts";
 
 /**
- * Per-step execution (stage 06): ACT with the stage-05 decision loop, then
- * independently JUDGE the expectation, and always capture evidence. The two
+ * Per-step execution: ACT with the decision loop, then independently JUDGE
+ * the expectation, and always capture evidence. The two
  * halves are deliberately separate Jev responsibilities — a `DONE` from the
  * actor is a claim the judge must confirm against a fresh view of the page.
  *
@@ -197,7 +197,7 @@ export async function runStep(opts: RunStepOptions): Promise<StepResult> {
     ).catch(
       (err): JudgeResult => ({
         verdict: null,
-        jevUsage: { inputTokens: 0, outputTokens: 0 },
+        jevUsage: zeroJevUsage(),
         snapshot: null,
         error: errorMessage(err),
       }),

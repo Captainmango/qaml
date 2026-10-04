@@ -7,8 +7,8 @@ export interface QamlSteelConfig {
 }
 
 /**
- * The generative text helper (stage 05, TYPE_TEXT only): any
- * OpenAI-compatible chat-completions endpoint.
+ * The generative text helper (TYPE_TEXT only): any OpenAI-compatible
+ * chat-completions endpoint.
  */
 export interface QamlTextConfig {
   model: string;

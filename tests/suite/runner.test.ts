@@ -29,7 +29,7 @@ import {
 } from "./helpers.ts";
 
 /**
- * Offline stage-07 tests: every seam (config, suite loading, session manager,
+ * Offline runner tests: every seam (config, suite loading, session manager,
  * connect/navigate/disconnect, mkdir, step runner, clock, Jev client) is
  * injected, so no Steel, network, filesystem, or env access happens.
  */

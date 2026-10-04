@@ -2,9 +2,9 @@ import type { JsonValue } from "@typesafe-ai/sdk";
 import type { BrowserSnapshot, SnapshotElement } from "@/browser/connection.ts";
 
 /**
- * Page state → Jev state (stage 05). Turns the raw stage-03 extraction into
- * the capped, capability-classified element table the decision questions are
- * built from, in the jev-ultrafast `[i] role  name · value` shape.
+ * Page state → Jev state. Turns the raw browser extraction into the capped,
+ * capability-classified element table the decision questions are built from,
+ * in the jev-ultrafast `[i] role  name · value` shape.
  *
  * Rules:
  *
@@ -73,7 +73,8 @@ const TYPEABLE_ROLES = new Set(["textbox", "searchbox"]);
 const SELECTABLE_TAGS = new Set(["select"]);
 const SELECTABLE_ROLES = new Set(["combobox", "listbox"]);
 
-function capText(text: string, cap: number): string {
+/** Collapses whitespace and caps display length with an ellipsis. */
+export function capText(text: string, cap: number): string {
   const collapsed = text.replace(/\s+/g, " ").trim();
   return collapsed.length > cap ? `${collapsed.slice(0, cap - 1)}…` : collapsed;
 }
@@ -97,12 +98,12 @@ function toAgentElement(element: SnapshotElement): AgentElement {
   const selectable =
     SELECTABLE_TAGS.has(element.tag) ||
     SELECTABLE_ROLES.has(element.role ?? "");
-  // Attribute-based name first (stage 03), own text as the fallback — a
+  // Attribute-based name first, own text as the fallback — a
   // <button>Login</button> has no name attribute but must still read "Login".
   const name = capText(element.name ?? element.text ?? "", NAME_CHAR_CAP);
   // Skip the value when it IS the name (e.g. <input type=submit value=Login>
-  // — stage 03 already fell back to `value` for the name): "[i] role Login ·
-  // Login" would just waste Jev's tokens.
+  // — the extraction already fell back to `value` for the name): "[i] role
+  // Login · Login" would just waste Jev's tokens.
   const rawValue = password ? undefined : element.attributes.value?.trim();
   const value = rawValue ? capText(rawValue, VALUE_CHAR_CAP) : undefined;
 
@@ -120,7 +121,7 @@ function toAgentElement(element: SnapshotElement): AgentElement {
 }
 
 /**
- * Builds the per-cycle page snapshot: one raw stage-03 snapshot in, one
+ * Builds the per-cycle page snapshot: one raw browser snapshot in, one
  * capped + classified table out. Pure — no browser access, so the "atomic
  * per cycle" rule is the loop's job (one snapshotState() feeding both the
  * question and target validation).

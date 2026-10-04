@@ -17,7 +17,7 @@ import { delay, withTimeout } from "@/utils/timing.ts";
  * Ownership: because `cdp_url` is set, browser-use treats the browser as
  * externally owned (`ownsBrowserResources = false`) — it never launches a
  * local Chromium and never kills the remote one. Steel owns the browser; the
- * stage-02 session manager owns release.
+ * session manager owns release.
  *
  * Quirks found against the installed browser-use (0.8.0):
  *
@@ -88,9 +88,6 @@ export const BROWSER_ACTIONS = {
   /** { code: string } — zero-LLM escape hatch; result is the JSON-stringified value */
   evaluate: "evaluate",
 } as const;
-
-export type BrowserActionName =
-  (typeof BROWSER_ACTIONS)[keyof typeof BROWSER_ACTIONS];
 
 /**
  * The slice of browser-use's BrowserSession this module depends on.
@@ -266,7 +263,7 @@ function toSnapshotElement(
 /**
  * Extracts `{ url, title, elements }` from the browser state summary's
  * indexed `selector_map`. This is raw material only — formatting the element
- * table for Jev lives in `src/agent/snapshot.ts` (stage 05).
+ * table for Jev lives in `src/agent/snapshot.ts`.
  */
 export async function snapshotState(
   session: BrowserSessionLike,
@@ -295,7 +292,7 @@ export interface ActDeps {
 
 /**
  * Invokes a registered browser-use action directly (no Agent, no generative
- * LLM). This is stage 05/06's single call site for browser actions — use the
+ * LLM). This is the single call site for browser actions — use the
  * BROWSER_ACTIONS constants for the name.
  *
  * The default action handlers all return ActionResult; an action that failed
@@ -348,8 +345,8 @@ async function navigateTo(
  * Prepares the browser for a run at `url`: always navigates there, and when
  * `clear` is set also wipes every cookie plus the origin's
  * localStorage/sessionStorage and reloads, so the run starts pristine.
- * Clearing is a caller decision (suite `clear_browser_state` / run option,
- * stage 07): local Steel reuses ONE warm browser across sessions, so without
+ * Clearing is a caller decision (suite `clear_browser_state` / run option):
+ * local Steel reuses ONE warm browser across sessions, so without
  * it a previous run's cart or login leaks in — but some suites deliberately
  * want carried-over state. Steps within a run always share state either way.
  *

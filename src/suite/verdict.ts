@@ -11,9 +11,11 @@ import {
   type JevUsage,
   type SystemOneLike,
   toJevUsage,
+  zeroJevUsage,
 } from "@/agent/jev.ts";
 import {
   buildPageSnapshot,
+  capText,
   jevElements,
   type PageSnapshot,
 } from "@/agent/snapshot.ts";
@@ -29,7 +31,7 @@ import { loadConfig } from "@/utils/config.ts";
 import { errorMessage, isRetryableError } from "@/utils/errors.ts";
 
 /**
- * The judge (stage 06): an INDEPENDENT verdict on whether a step's expectation
+ * The judge: an INDEPENDENT verdict on whether a step's expectation
  * holds, taken from the page as it actually is AFTER the actor finishes. The
  * actor's `DONE` is a claim, never proof — this module re-observes the page
  * with a fresh snapshot and asks Jev one Noul question whose probability is
@@ -66,18 +68,15 @@ export type VerdictQuestions = {
 /** Cap on the page visible text handed to the judge — bounds input tokens. */
 export const VISIBLE_TEXT_CAP = 4000;
 
-/** Initial judge attempt + ONE retry on a transient failure (stage 06). */
+/** Initial judge attempt + ONE retry on a transient failure. */
 export const JUDGE_ATTEMPTS = 2;
 
 /** Zero-LLM page-text probe; `evaluate` returns a JSON-stringified value. */
 const VISIBLE_TEXT_CODE = "document.body?.innerText ?? ''";
 
-/** Collapses whitespace and trims to VISIBLE_TEXT_CAP (stage-05 text rules). */
+/** Collapses whitespace and trims to VISIBLE_TEXT_CAP (element-table text rules). */
 export function capVisibleText(text: string): string {
-  const collapsed = text.replace(/\s+/g, " ").trim();
-  return collapsed.length > VISIBLE_TEXT_CAP
-    ? `${collapsed.slice(0, VISIBLE_TEXT_CAP - 1)}…`
-    : collapsed;
+  return capText(text, VISIBLE_TEXT_CAP);
 }
 
 export interface VerdictRequestInput {
@@ -209,7 +208,7 @@ export async function judgeExpectation(
   // Default is constructed only when not injected — tests never touch env.
   const jev: SystemOneLike =
     deps.jev ?? createJevClient(loadConfig().decisions);
-  const jevUsage: JevUsage = { inputTokens: 0, outputTokens: 0 };
+  const jevUsage = zeroJevUsage();
 
   let snapshot: PageSnapshot | null = null;
   let lastError: unknown;

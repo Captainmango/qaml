@@ -18,14 +18,14 @@ import { loadConfig, type QamlConfig } from "@/utils/config.ts";
 import { errorMessage } from "@/utils/errors.ts";
 
 /**
- * The CLI (stage 09) — the human- and skill-facing entrypoint. Assistants
+ * The CLI — the human- and skill-facing entrypoint. Assistants
  * that don't use the MCP server run this, so its output streams and exit
  * codes are a product contract:
  *
- * - `qaml validate <suite-file>` — load-only check (stage 04): "valid" + step
- *   count, or the schema/env errors.
- * - `qaml run <suite-file> [flags]` — load → run suite (stage 07) → write
- *   report + print console summary (stage 08). Progress streams to STDERR so
+ * - `qaml validate <suite-file>` — load-only check: "valid" + step count,
+ *   or the schema/env errors.
+ * - `qaml run <suite-file> [flags]` — load → run suite → write report +
+ *   print console summary. Progress streams to STDERR so
  *   STDOUT stays clean for the summary (assistants parse stdout).
  * - Exit codes (contract — do not change casually):
  *   - `0` — suite ran, all steps passed (or `validate` succeeded).
@@ -56,13 +56,13 @@ export type WriteReportFn = (
 export interface CliDeps {
   /** Defaults to loadConfig() from env. */
   loadConfigFn?: () => QamlConfig;
-  /** Defaults to the stage-02 Steel health check. */
+  /** Defaults to the Steel health check. */
   assertSteelFn?: (baseUrl: string) => Promise<void>;
-  /** Defaults to the stage-04 loader. */
+  /** Defaults to the suite loader. */
   loadSuiteFn?: (path: string) => Promise<QamlSuite>;
-  /** Defaults to the stage-07 runner. */
+  /** Defaults to the suite runner. */
   runSuiteFn?: RunSuiteFn;
-  /** Defaults to the stage-08 report writer. */
+  /** Defaults to the report writer. */
   writeReportFn?: WriteReportFn;
   /** Console summary + report paths. Default: console.log. */
   stdout?: (line: string) => void;
@@ -164,7 +164,7 @@ async function validateCommand(
   deps: ResolvedCliDeps,
 ): Promise<number> {
   try {
-    // Load only (stage 04): schema validation + env interpolation checks.
+    // Load only: schema validation + env interpolation checks.
     // No config, no Steel — validating a suite must work anywhere.
     const suite = await deps.loadSuiteFn(suiteFile);
     const count = suite.steps.length;

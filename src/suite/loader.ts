@@ -14,7 +14,7 @@ import { type QamlStep, type QamlSuite, suiteSchema } from "@/suite/schema.ts";
  * from `.env`), and every declared (`env:`) or referenced variable that is
  * missing/empty is a load error naming the variable. The raw, pre-
  * interpolation strings are kept on each step so reports can show `${VAR}`
- * placeholders instead of secrets (stages 06 and 08).
+ * placeholders instead of secrets.
  */
 
 /** `${VAR}` references in `instruction`/`expect`; only valid env names match. */

@@ -8,9 +8,9 @@ import type { QamlSuite } from "@/suite/schema.ts";
 import type { StepResult } from "@/suite/step-runner.ts";
 
 /**
- * Reporting (stage 08): turn a `SuiteResult` into durable artifacts under the
- * run dir — `report.json` (the SuiteResult serialized as-is plus report paths;
- * exactly what the stage-10 MCP `run_suite` tool returns as structured
+ * Reporting: turn a `SuiteResult` into durable artifacts under the run dir —
+ * `report.json` (the SuiteResult serialized as-is plus report paths; exactly
+ * what the MCP `run_suite` tool returns as structured
  * content), `report.md` (human-readable, for PRs and bug tickets), and a
  * compact console summary for the CLI.
  *
@@ -20,20 +20,20 @@ import type { StepResult } from "@/suite/step-runner.ts";
  *   from the loaded suite, never interpolated values. `SuiteResult` itself
  *   carries no step strings, so `writeReport` optionally takes the suite to
  *   look them up by step id; without it, the expectation line says so.
- * - Typed password values are already MASKED_TEXT in the actor trace
- *   (stage 05); the trace is rendered verbatim via formatTraceEntry.
+ * - Typed password values are already MASKED_TEXT in the actor trace; the
+ *   trace is rendered verbatim via formatTraceEntry.
  * - The Steel connect URL (which embeds the API key in cloud mode) is never
  *   part of a SuiteResult — the runner records only the session id and viewer
- *   URL — and every session URL still passes through stage 02's redactApiKey
- *   in BOTH artifacts as defense in depth, so `grep -r "$STEEL_API_KEY" runs/`
+ *   URL — and every session URL still passes through `redactApiKey` in BOTH
+ *   artifacts as defense in depth, so `grep -r "$STEEL_API_KEY" runs/`
  *   stays empty no matter what a future Steel payload puts in a URL.
- * - steel-sdk v0.18's Session type exposes no recording field (checked per
- *   the stage-08 plan), so the evidence section is the session id + viewer URL.
+ * - steel-sdk v0.18's Session type exposes no recording field, so the
+ *   evidence section is the session id + viewer URL.
  * - Screenshots may incidentally show page content (accepted, documented).
  */
 
-export const REPORT_JSON_NAME = "report.json";
-export const REPORT_MD_NAME = "report.md";
+const REPORT_JSON_NAME = "report.json";
+const REPORT_MD_NAME = "report.md";
 
 export interface ReportPaths {
   jsonPath: string;
@@ -55,7 +55,7 @@ export interface WriteReportOptions {
  */
 export type ReportJson = SuiteResult & { report: ReportPaths };
 
-export function reportPathsFor(runDir: string): ReportPaths {
+function reportPathsFor(runDir: string): ReportPaths {
   return {
     jsonPath: join(runDir, REPORT_JSON_NAME),
     markdownPath: join(runDir, REPORT_MD_NAME),

@@ -6,7 +6,7 @@ import type {
   SystemOneRequest,
   SystemOneResult,
 } from "@typesafe-ai/sdk";
-import { createJevClient, type JevClient } from "@/agent/jev.ts";
+import { createJevClient, type JevClient, zeroJevUsage } from "@/agent/jev.ts";
 import { createTextHelper, type TextHelper } from "@/agent/text.ts";
 import {
   type BrowserSessionLike,
@@ -31,8 +31,8 @@ import { loadConfig, type QamlConfig } from "@/utils/config.ts";
 import { errorMessage } from "@/utils/errors.ts";
 
 /**
- * Whole-suite orchestration (stage 07): ONE Steel session, ONE shared browser,
- * steps strictly in order, evidence per step (stage 06), and the session is
+ * Whole-suite orchestration: ONE Steel session, ONE shared browser, steps
+ * strictly in order, evidence per step, and the session is
  * ALWAYS released — a QA workflow is stateful (login in step 1 must persist
  * into step 3), so steps never get fresh sessions.
  *
@@ -170,7 +170,7 @@ export function skippedStepResult(stepId: string): StepResult {
       actions: [],
       cycles: 0,
       durationMs: 0,
-      jevUsage: { inputTokens: 0, outputTokens: 0 },
+      jevUsage: zeroJevUsage(),
       error: "not attempted — the run ended before this step",
     },
     verdict: null,

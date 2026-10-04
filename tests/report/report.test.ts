@@ -21,7 +21,7 @@ import type { StepResult } from "@/suite/step-runner.ts";
 import { agentResult, stepResult } from "../suite/helpers.ts";
 
 /**
- * Offline stage-08 tests: fabricated SuiteResults (passed, failed-with-
+ * Offline report tests: fabricated SuiteResults (passed, failed-with-
  * skipped, infra error, masked-secret trace) drive writeReport against a temp
  * run dir. No Steel, no TypeSafe, no network. The secrets-hygiene rules are
  * asserted directly: interpolated values and API-key material must never
@@ -310,7 +310,7 @@ describe("formatReportMarkdown — failed & error expansion", () => {
     expect(markdown).toContain(
       "#1 CLICK the username input (conf 0.93, 210ms)",
     );
-    // The masked password type from stage 05 passes through verbatim.
+    // The masked password text passes through verbatim.
     expect(markdown).toContain(
       `#2 TYPE_TEXT the password input → "${MASKED_TEXT}" (conf 0.90, 210ms)`,
     );
@@ -452,7 +452,7 @@ describe("secrets hygiene", () => {
     // The Markdown keeps the placeholders and the masked password type.
     expect(markdown).toContain("${SAUCE_USERNAME}");
     expect(markdown).toContain(MASKED_TEXT);
-    // The JSON applies the stage-02 redaction to the session URL too: the
+    // The JSON applies the same redaction to the session URL too: the
     // key is gone even from the as-is artifact, so greps over runs/ stay
     // empty no matter what a Steel payload ever puts in a URL.
     expect(json).toContain("apiKey=***");

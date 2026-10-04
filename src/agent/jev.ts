@@ -9,13 +9,13 @@ import {
 
 /**
  * The single seam between QAML and TypeSafe. Everything that asks Jev
- * anything (decision loop now, stage-06 verdicts later) goes through a
+ * anything (the decision loop and the verdict judge alike) goes through a
  * `JevClient` so model id, timeouts, retries, and usage accounting live in
  * one place.
  *
  * Retry policy: the SDK already classifies transient failures (408/429/5xx,
  * connection errors, timeouts) and retries them with backoff — we pin that
- * to ONE retry per the stage-05 budget instead of layering a second retry
+ * to ONE retry per the decision budget instead of layering a second retry
  * loop on top. Anything still failing surfaces to the caller, which decides
  * honestly (loop → `error` status, never a silent pass).
  */
@@ -36,6 +36,11 @@ export function toJevUsage(usage: Usage): JevUsage {
 export function addJevUsage(total: JevUsage, delta: JevUsage): void {
   total.inputTokens += delta.inputTokens;
   total.outputTokens += delta.outputTokens;
+}
+
+/** A zeroed accumulator — the starting point for per-run/per-step totals. */
+export function zeroJevUsage(): JevUsage {
+  return { inputTokens: 0, outputTokens: 0 };
 }
 
 /** The slice of TypeSafeClient this module depends on (injectable for tests). */
@@ -85,7 +90,7 @@ export function createJevClient(
       retry: { maxRetries: JEV_TRANSIENT_RETRIES },
     });
 
-  const usage: JevUsage = { inputTokens: 0, outputTokens: 0 };
+  const usage = zeroJevUsage();
   let requests = 0;
 
   return {

@@ -7,7 +7,7 @@ import {
 } from "@/utils/errors.ts";
 
 /**
- * The text helper (stage 05) — the ONLY generative model call in QAML. Jev
+ * The text helper — the ONLY generative model call in QAML. Jev
  * decides what to do; when (and only when) it chooses TYPE_TEXT, this small
  * OpenAI-compatible model produces the exact string to type, from the goal +
  * field context. The contract is strict: the reply must parse as

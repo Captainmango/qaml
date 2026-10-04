@@ -8,9 +8,9 @@ import {
 import { delay } from "@/utils/timing.ts";
 
 /**
- * Op + target → browser-use registry action (stage 05's hands). Every call
- * goes through the stage-03 `act()` seam; nothing here knows about Jev, and
- * nothing generative happens here.
+ * Op + target → browser-use registry action. Every call goes through the
+ * browser `act()` seam; nothing here knows about Jev, and nothing generative
+ * happens here.
  *
  * After each action we wait for useful state with HARD caps (jev-ultrafast's
  * budgets: ≤200ms for combobox suggestions after typing, ~50ms / two frames
@@ -59,7 +59,7 @@ export interface ExecuteOperationOptions {
   delayFn?: (ms: number) => Promise<void>;
 }
 
-/** The default actFn: straight through to stage 03's `act` (shared by the loop). */
+/** The default actFn: straight through to `act` (shared by the loop). */
 export const defaultAct: ActFn = (session, actionName, params) =>
   act(session, actionName, params);
 

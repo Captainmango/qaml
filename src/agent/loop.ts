@@ -13,6 +13,7 @@ import {
   type JevUsage,
   type SystemOneLike,
   toJevUsage,
+  zeroJevUsage,
 } from "@/agent/jev.ts";
 import {
   buildDecisionRequest,
@@ -46,14 +47,14 @@ import { errorMessage, isRetryableError } from "@/utils/errors.ts";
 import { delay } from "@/utils/timing.ts";
 
 /**
- * The cycle driver (stage 05). Per cycle: ONE snapshot → ONE speculative
+ * The cycle driver. Per cycle: ONE snapshot → ONE speculative
  * Jev request → validate → execute → trace. Guards, in order of appearance:
  *
  * - Budgets: `maxActions` decision cycles and a hard `timeoutMs` deadline,
  *   checked before every cycle.
  * - Confidence: a non-terminal operation below `confidenceThreshold` waits
  *   once; still below on the next cycle → `blocked`. DONE/BLOCKED are never
- *   gated — DONE is a claim the stage-06 judge verifies, not a verdict.
+ *   gated — DONE is a claim the judge verifies, not a verdict.
  * - Staleness: the chosen target index must exist in the SAME snapshot the
  *   question was built from (snapshots are atomic per cycle); a missing
  *   index discards the decision and re-snapshots.
@@ -165,7 +166,7 @@ export async function runDecisionLoop(
   const startedAt = now();
   const deadline = startedAt + timeoutMs;
   const actions: ActionTraceEntry[] = [];
-  const jevUsage: JevUsage = { inputTokens: 0, outputTokens: 0 };
+  const jevUsage = zeroJevUsage();
   let cycles = 0;
   let lowConfidenceStreak = 0;
   let wastedStreak = 0;
@@ -423,7 +424,7 @@ export async function runDecisionLoop(
   }
 }
 
-/** One human-readable trace line (smoke scripts now, reports in stage 08). */
+/** One human-readable trace line (smoke scripts and reports). */
 export function formatTraceEntry(entry: ActionTraceEntry): string {
   const target =
     entry.targetIndex !== null

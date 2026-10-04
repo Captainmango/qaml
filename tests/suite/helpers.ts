@@ -21,7 +21,7 @@ import type { JudgeOptions, JudgeResult, Verdict } from "@/suite/verdict.ts";
 import { systemOneResult } from "../agent/helpers.ts";
 
 /**
- * Shared fakes/builders for the stage-06/07 suite tests. Everything is
+ * Shared fakes/builders for the suite tests. Everything is
  * offline: scripted Noul verdicts, a scripted actor loop, a scripted judge, a
  * recording screenshot saver, a scripted step runner, and a fake Steel
  * session manager.
