@@ -78,14 +78,14 @@ re-snapshots.
 
 ## Tasks
 
-- [ ] Implement `src/suite/verdict.ts` (fresh snapshot → Jev Noul →
+- [x] Implement `src/suite/verdict.ts` (fresh snapshot → Jev Noul →
   thresholded `Verdict`).
-- [ ] Implement `src/suite/step-runner.ts` (act → judge → evidence →
+- [x] Implement `src/suite/step-runner.ts` (act → judge → evidence →
   `StepResult`).
-- [ ] Loader addition (small): keep each step's **raw, pre-interpolation**
+- [x] Loader addition (small): keep each step's **raw, pre-interpolation**
   strings alongside the interpolated ones, so reports can show
   `${SAUCE_PASSWORD}` instead of the secret (stage 08 relies on this).
-- [ ] Write `scripts/step-smoke.ts`: connect, run one step (login on Sauce
+- [x] Write `scripts/step-smoke.ts`: connect, run one step (login on Sauce
   Demo) end-to-end, print the `StepResult` including verdict probability.
 
 ## Files

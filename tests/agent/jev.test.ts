@@ -41,7 +41,7 @@ describe("createJevClient", () => {
     const result = systemOneResult({}, { input_tokens: 5, output_tokens: 1 });
     const inner = recordingClient([result]);
     const jev = createJevClient(
-      { apiKey: "k", jevModel: "jev-latest" },
+      { apiKey: "k", model: "jev-latest" },
       { client: inner },
     );
 
@@ -55,7 +55,7 @@ describe("createJevClient", () => {
       systemOneResult({}, { input_tokens: 50, output_tokens: 4 }),
     ]);
     const jev = createJevClient(
-      { apiKey: "k", jevModel: "jev-latest" },
+      { apiKey: "k", model: "jev-latest" },
       { client: inner },
     );
 
@@ -76,7 +76,7 @@ describe("createJevClient", () => {
   it("propagates errors without counting them", async () => {
     const inner = recordingClient([]);
     const jev = createJevClient(
-      { apiKey: "k", jevModel: "jev-latest" },
+      { apiKey: "k", model: "jev-latest" },
       { client: inner },
     );
 
@@ -87,7 +87,7 @@ describe("createJevClient", () => {
 
   it("constructs a real SDK client without any network access", () => {
     // Construction only validates config — no request is made here.
-    const jev = createJevClient({ apiKey: "test-key", jevModel: "jev-custom" });
+    const jev = createJevClient({ apiKey: "test-key", model: "jev-custom" });
     expect(typeof jev.systemOne).toBe("function");
     expect(jev.requests).toBe(0);
   });

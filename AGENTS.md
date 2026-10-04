@@ -7,7 +7,7 @@
 
 ## Layout
 
-- Layout: `src/utils/` (config: env → typed `QamlConfig`, fail-fast), `src/steel/` (health, session manager), `src/browser/` (browser-use over Steel CDP: connect, snapshot, `act`), `src/agent/` (Jev decision loop: `jev` client wrapper, `snapshot` element table, `questions` speculative fan-out, `executor` op → registry action, `text` helper, `loop` cycle driver), `src/suite/` (schema, loader), `src/report/`, `src/mcp/`, `suites/examples/` (`*.qaml.yaml`), `tests/` (vitest unit tests), `scripts/` (live smoke scripts), `runs/` (run artifacts, gitignored). `index.ts` is a temporary readiness entry until the real CLI lands in stage 09.
+- Layout: `src/utils/` (config: env → typed `QamlConfig`, fail-fast), `src/steel/` (health, session manager), `src/browser/` (browser-use over Steel CDP: connect, snapshot, `act`), `src/agent/` (Jev decision loop: `jev` client wrapper, `snapshot` element table, `questions` speculative fan-out, `executor` op → registry action, `text` helper, `loop` cycle driver), `src/suite/` (schema, loader, `verdict` independent Jev Noul judge, `step-runner` per-step act + judge + evidence), `src/report/`, `src/mcp/`, `suites/examples/` (`*.qaml.yaml`), `tests/` (vitest unit tests), `scripts/` (live smoke scripts), `runs/` (run artifacts, gitignored). `index.ts` is a temporary readiness entry until the real CLI lands in stage 09.
 
 ## Setup
 

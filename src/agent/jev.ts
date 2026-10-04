@@ -59,7 +59,7 @@ export interface JevClient {
 
 export interface JevClientConfig {
   apiKey: string;
-  jevModel: string;
+  model: string;
 }
 
 export interface JevClientDeps {
@@ -80,7 +80,7 @@ export function createJevClient(
     deps.client ??
     new TypeSafeClient({
       apiKey: config.apiKey,
-      defaultModel: config.jevModel,
+      defaultModel: config.model,
       timeout: deps.timeoutMs ?? DEFAULT_JEV_TIMEOUT_MS,
       retry: { maxRetries: JEV_TRANSIENT_RETRIES },
     });

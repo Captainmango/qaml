@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   }
   await assertSteelReachable(config.steel.baseUrl);
 
-  const jev: JevClient = createJevClient(config.typesafe);
+  const jev: JevClient = createJevClient(config.decisions);
   const textHelper = createTextHelper(config.text);
   const problems: string[] = [];
 

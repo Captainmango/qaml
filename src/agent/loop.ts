@@ -159,7 +159,8 @@ export async function runDecisionLoop(
   const actFn = deps.actFn ?? defaultAct;
   const delayFn = deps.delayFn ?? delay;
   // Defaults are constructed only when not injected — tests never touch env.
-  const jev: SystemOneLike = deps.jev ?? createJevClient(loadConfig().typesafe);
+  const jev: SystemOneLike =
+    deps.jev ?? createJevClient(loadConfig().decisions);
   const textHelper =
     deps.textHelper !== undefined ? deps.textHelper : defaultTextHelper();
 

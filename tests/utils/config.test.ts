@@ -11,9 +11,9 @@ describe("loadConfig", () => {
       mode: "local",
       apiKey: undefined,
     });
-    expect(config.typesafe).toEqual({
+    expect(config.decisions).toEqual({
       apiKey: "ts-key",
-      jevModel: "jev-latest",
+      model: "jev-latest",
     });
     expect(config.runsDir).toBe("runs");
   });
@@ -49,7 +49,7 @@ describe("loadConfig", () => {
       QAML_JEV_MODEL: "jev-custom",
       QAML_RUNS_DIR: "out/runs",
     });
-    expect(config.typesafe.jevModel).toBe("jev-custom");
+    expect(config.decisions.model).toBe("jev-custom");
     expect(config.runsDir).toBe("out/runs");
   });
 

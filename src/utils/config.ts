@@ -18,9 +18,9 @@ export interface QamlTextConfig {
 
 export interface QamlConfig {
   steel: QamlSteelConfig;
-  typesafe: {
+  decisions: {
     apiKey: string;
-    jevModel: string;
+    model: string;
   };
   /** Absent when QAML_TEXT_MODEL is unset — TYPE_TEXT steps then error. */
   text?: QamlTextConfig;
@@ -117,9 +117,9 @@ export function loadConfig(
   const text = loadTextConfig(env);
   return {
     steel,
-    typesafe: {
+    decisions: {
       apiKey: decisionApiKey,
-      jevModel: env.QAML_JEV_MODEL?.trim() || DEFAULT_JEV_MODEL,
+      model: env.QAML_JEV_MODEL?.trim() || DEFAULT_JEV_MODEL,
     },
     ...(text && { text }),
     runsDir: env.QAML_RUNS_DIR?.trim() || DEFAULT_RUNS_DIR,
