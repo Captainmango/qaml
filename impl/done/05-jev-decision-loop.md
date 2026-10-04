@@ -132,16 +132,42 @@ and accumulating the trace. Never throws for page-level weirdness — returns
 
 ## Tasks
 
-- [ ] Implement `src/agent/snapshot.ts`, `questions.ts`, `executor.ts`,
+- [x] Implement `src/agent/snapshot.ts`, `questions.ts`, `executor.ts`,
   `text.ts`, `loop.ts`.
-- [ ] Wrap the TypeSafe client in `src/agent/jev.ts` (model id from config,
+- [x] Wrap the TypeSafe client in `src/agent/jev.ts` (model id from config,
   timeouts, one retry on transient errors, usage accumulation).
-- [ ] Write `scripts/loop-smoke.ts`: connect (stages 02–03), run the loop with
+- [x] Write `scripts/loop-smoke.ts`: connect (stages 02–03), run the loop with
   goal "Log in with username standard_user and password secret_sauce" against
   `https://www.saucedemo.com`, print the action trace and final status. **No
   browser-use `Agent` anywhere.**
-- [ ] Negative check: goal "Book a flight to Tokyo" on the same page must end
+- [x] Negative check: goal "Book a flight to Tokyo" on the same page must end
   `blocked` (or `max_actions`) — never a false `done`.
+
+## Implementation notes (as delivered)
+
+- SELECT confirmed against browser-use 0.8.0: the action is
+  `select_dropdown_option` `{ index, text }`. `<option>` children are NOT in
+  the element table, so a SELECT cycle reads options on demand via
+  `get_dropdown_options` (added to `BROWSER_ACTIONS`) and — when there is more
+  than one — spends one tiny follow-up Jev Choice request on WHICH option.
+  That is the only two-request cycle; single-option dropdowns skip it.
+- `runDecisionLoop` takes `BrowserSessionLike` plus injectable deps
+  (`jev`, `textHelper`, `actFn`, `snapshotFn`, `delayFn`, `now`) per the
+  stage-03 testability convention; budgets default from `SUITE_CONFIG_DEFAULTS`.
+  Offline unit tests live in `tests/agent/` (shared fakes in
+  `tests/agent/helpers.ts`).
+- `ActionTraceEntry` gained optional `note` (guard/deviation reasons) and
+  `snapshotTruncated` (the table-cap record); `AgentRunResult` gained an
+  optional `error` message for `status: "error"`.
+- The confidence guard gates non-terminal operations only: a low-confidence
+  `DONE` still exits (the stage-06 judge verifies the claim), and `BLOCKED`
+  is always accepted as honest. Three consecutive wasted cycles (stale
+  targets, unreadable dropdowns, failed actions) end the loop `blocked`
+  instead of burning the whole budget.
+- Text-helper config (`loadTextConfig` in `src/utils/config.ts`): key
+  precedence `QAML_TEXT_MODEL_API_KEY` → provider key by base-URL host
+  (OpenRouter vs. OpenAI) → the other provider key.
+
 
 ## Files
 

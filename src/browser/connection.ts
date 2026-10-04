@@ -67,6 +67,8 @@ export const BROWSER_ACTIONS = {
   scrollToText: "scroll_to_text",
   /** { index: number, text: string } */
   selectDropdown: "select_dropdown_option",
+  /** { index: number } — lists a native dropdown's options; extracted_content is a formatted list */
+  dropdownOptions: "get_dropdown_options",
   /** { keys: string } — e.g. "Enter", "Control+a" */
   sendKeys: "send_keys",
   /** { seconds?: number } */

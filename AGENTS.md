@@ -7,12 +7,12 @@
 
 ## Layout
 
-- Layout: `src/utils/` (config: env → typed `QamlConfig`, fail-fast), `src/steel/` (health, session manager), `src/browser/`, `src/agent/`, `src/suite/`, `src/report/`, `src/mcp/`, `suites/examples/` (`*.qaml.yaml`), `tests/` (vitest unit tests), `scripts/` (live smoke scripts), `runs/` (run artifacts, gitignored). `index.ts` is a temporary readiness entry until the real CLI lands in stage 09.
+- Layout: `src/utils/` (config: env → typed `QamlConfig`, fail-fast), `src/steel/` (health, session manager), `src/browser/` (browser-use over Steel CDP: connect, snapshot, `act`), `src/agent/` (Jev decision loop: `jev` client wrapper, `snapshot` element table, `questions` speculative fan-out, `executor` op → registry action, `text` helper, `loop` cycle driver), `src/suite/` (schema, loader), `src/report/`, `src/mcp/`, `suites/examples/` (`*.qaml.yaml`), `tests/` (vitest unit tests), `scripts/` (live smoke scripts), `runs/` (run artifacts, gitignored). `index.ts` is a temporary readiness entry until the real CLI lands in stage 09.
 
 ## Setup
 
 - Install dependencies: `bun install`. Note: `browser-use`'s postinstall (`playwright install chromium`) is intentionally skipped — Steel hosts the browser, so local Chromium is optional. Bun blocks it as untrusted; `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` also skips it.
-- Environment: copy `.env.example` to `.env` (Bun auto-loads it). `TYPESAFE_API_KEY` is required; `STEEL_API_KEY` only when `STEEL_BASE_URL` points at Steel Cloud (non-localhost = cloud mode).
+- Environment: copy `.env.example` to `.env` (Bun auto-loads it). `TYPESAFE_API_KEY` is required; `STEEL_API_KEY` only when `STEEL_BASE_URL` points at Steel Cloud (non-localhost = cloud mode). The text helper (`QAML_TEXT_MODEL` + base URL + a provider key: `QAML_TEXT_MODEL_API_KEY`, else `OPENAI_API_KEY`/`OPENROUTER_API_KEY` by host) is required for steps that type text — the only generative call in QAML.
 
 ## Steel (Local Browser)
 

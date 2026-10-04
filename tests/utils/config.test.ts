@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig, loadSteelConfig } from "@/utils/config.ts";
+import { loadConfig, loadSteelConfig, loadTextConfig } from "@/utils/config.ts";
 
 const baseEnv = { TYPESAFE_API_KEY: "ts-key" } as const;
 
@@ -51,6 +51,95 @@ describe("loadConfig", () => {
     });
     expect(config.typesafe.jevModel).toBe("jev-custom");
     expect(config.runsDir).toBe("out/runs");
+  });
+
+  it("includes the text helper only when QAML_TEXT_MODEL is configured", () => {
+    expect(loadConfig({ ...baseEnv }).text).toBeUndefined();
+
+    const config = loadConfig({
+      ...baseEnv,
+      QAML_TEXT_MODEL: "gpt-4o-mini",
+      OPENAI_API_KEY: "sk-1",
+    });
+    expect(config.text).toEqual({
+      model: "gpt-4o-mini",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-1",
+    });
+  });
+});
+
+describe("loadTextConfig", () => {
+  it("is undefined when QAML_TEXT_MODEL is unset", () => {
+    expect(loadTextConfig({})).toBeUndefined();
+    expect(loadTextConfig({ QAML_TEXT_MODEL: "  " })).toBeUndefined();
+    expect(loadTextConfig({ OPENAI_API_KEY: "sk-1" })).toBeUndefined();
+  });
+
+  it("defaults to the OpenAI endpoint and prefers OPENAI_API_KEY", () => {
+    expect(
+      loadTextConfig({
+        QAML_TEXT_MODEL: "gpt-4o-mini",
+        OPENAI_API_KEY: "sk-1",
+        OPENROUTER_API_KEY: "or-1",
+      }),
+    ).toEqual({
+      model: "gpt-4o-mini",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-1",
+    });
+  });
+
+  it("prefers OPENROUTER_API_KEY for an OpenRouter base URL and trims slashes", () => {
+    expect(
+      loadTextConfig({
+        QAML_TEXT_MODEL: "openai/gpt-4o-mini",
+        QAML_TEXT_MODEL_BASE_URL: "https://openrouter.ai/api/v1/",
+        OPENAI_API_KEY: "sk-1",
+        OPENROUTER_API_KEY: "or-1",
+      }),
+    ).toEqual({
+      model: "openai/gpt-4o-mini",
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "or-1",
+    });
+  });
+
+  it("falls back to the other provider key when the preferred one is missing", () => {
+    expect(
+      loadTextConfig({
+        QAML_TEXT_MODEL: "m",
+        QAML_TEXT_MODEL_BASE_URL: "https://openrouter.ai/api/v1",
+        OPENAI_API_KEY: "sk-1",
+      })?.apiKey,
+    ).toBe("sk-1");
+  });
+
+  it("lets an explicit QAML_TEXT_MODEL_API_KEY win", () => {
+    expect(
+      loadTextConfig({
+        QAML_TEXT_MODEL: "m",
+        QAML_TEXT_MODEL_API_KEY: "explicit",
+        OPENAI_API_KEY: "sk-1",
+        OPENROUTER_API_KEY: "or-1",
+      })?.apiKey,
+    ).toBe("explicit");
+  });
+
+  it("fails fast when the model is set but no key exists", () => {
+    expect(() => loadTextConfig({ QAML_TEXT_MODEL: "m" })).toThrow(
+      /QAML_TEXT_MODEL_API_KEY/,
+    );
+  });
+
+  it("rejects an invalid QAML_TEXT_MODEL_BASE_URL", () => {
+    expect(() =>
+      loadTextConfig({
+        QAML_TEXT_MODEL: "m",
+        QAML_TEXT_MODEL_BASE_URL: "not a url",
+        OPENAI_API_KEY: "sk-1",
+      }),
+    ).toThrow(/QAML_TEXT_MODEL_BASE_URL/);
   });
 });
 

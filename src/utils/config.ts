@@ -6,17 +6,30 @@ export interface QamlSteelConfig {
   apiKey?: string;
 }
 
+/**
+ * The generative text helper (stage 05, TYPE_TEXT only): any
+ * OpenAI-compatible chat-completions endpoint (OpenAI, OpenRouter, local).
+ */
+export interface QamlTextConfig {
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+}
+
 export interface QamlConfig {
   steel: QamlSteelConfig;
   typesafe: {
     apiKey: string;
     jevModel: string;
   };
+  /** Absent when QAML_TEXT_MODEL is unset — TYPE_TEXT steps then error. */
+  text?: QamlTextConfig;
   runsDir: string;
 }
 
 const DEFAULT_STEEL_BASE_URL = "http://localhost:3000";
 const DEFAULT_JEV_MODEL = "jev-latest";
+const DEFAULT_TEXT_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_RUNS_DIR = "runs";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -54,6 +67,46 @@ export function loadSteelConfig(
 }
 
 /**
+ * Reads the text-helper section of env. Returns `undefined` when
+ * `QAML_TEXT_MODEL` is unset (the helper is only needed for TYPE_TEXT
+ * steps); a set model without a usable key fails fast naming the keys tried.
+ * Key precedence: explicit `QAML_TEXT_MODEL_API_KEY`, then the provider key
+ * matching the base URL's host (OpenRouter vs. OpenAI), then the other one.
+ */
+export function loadTextConfig(
+  env: Record<string, string | undefined> = process.env,
+): QamlTextConfig | undefined {
+  const model = env.QAML_TEXT_MODEL?.trim();
+  if (!model) return undefined;
+
+  const baseUrl = (
+    env.QAML_TEXT_MODEL_BASE_URL?.trim() || DEFAULT_TEXT_BASE_URL
+  ).replace(/\/+$/, "");
+  let hostname: string;
+  try {
+    hostname = new URL(baseUrl).hostname;
+  } catch {
+    throw new Error(
+      `QAML_TEXT_MODEL_BASE_URL \`${baseUrl}\` is not a valid URL — set it to e.g. ${DEFAULT_TEXT_BASE_URL} (see .env.example).`,
+    );
+  }
+
+  const providerKeys = hostname.includes("openrouter")
+    ? [env.OPENROUTER_API_KEY, env.OPENAI_API_KEY]
+    : [env.OPENAI_API_KEY, env.OPENROUTER_API_KEY];
+  const apiKey =
+    env.QAML_TEXT_MODEL_API_KEY?.trim() ||
+    providerKeys.map((key) => key?.trim()).find((key) => key);
+  if (!apiKey) {
+    throw new Error(
+      `QAML_TEXT_MODEL is set (\`${model}\`) but no text-helper API key was found — set QAML_TEXT_MODEL_API_KEY, or a provider key for ${baseUrl} (OPENAI_API_KEY / OPENROUTER_API_KEY) in your .env.`,
+    );
+  }
+
+  return { model, baseUrl, apiKey };
+}
+
+/**
  * Reads env (Bun auto-loads `.env`) and returns a typed config. Fails fast
  * with an actionable message naming the missing/invalid key.
  */
@@ -69,12 +122,14 @@ export function loadConfig(
     );
   }
 
+  const text = loadTextConfig(env);
   return {
     steel,
     typesafe: {
       apiKey: typesafeApiKey,
       jevModel: env.QAML_JEV_MODEL?.trim() || DEFAULT_JEV_MODEL,
     },
+    ...(text && { text }),
     runsDir: env.QAML_RUNS_DIR?.trim() || DEFAULT_RUNS_DIR,
   };
 }
