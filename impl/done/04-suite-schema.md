@@ -77,23 +77,24 @@ Rules:
 
 ## Tasks
 
-- [ ] Implement `src/suite/schema.ts` with strict zod schemas and inferred types.
-- [ ] Implement `src/suite/loader.ts` (parse → validate → env check →
+- [x] Implement `src/suite/schema.ts` with strict zod schemas and inferred types.
+- [x] Implement `src/suite/loader.ts` (parse → validate → env check →
   interpolate).
-- [ ] Add the example suite above under `suites/examples/`.
-- [ ] Add offline unit tests (`bun test`) in `src/suite/loader.test.ts`:
-  valid fixture loads; missing `expect` fails with the right path; unknown key
-  rejected; missing env var names the variable; `${VAR}` interpolation works.
+- [x] Add the example suite above under `suites/examples/`.
+- [x] Add offline unit tests (vitest, `bun run test`) in
+  `tests/suite/loader.test.ts`: valid fixture loads; missing `expect` fails
+  with the right path; unknown key rejected; missing env var names the
+  variable; `${VAR}` interpolation works.
 
 ## Files
 
 | Action | Path |
 | --- | --- |
-| Create | `src/suite/schema.ts`, `src/suite/loader.ts`, `src/suite/loader.test.ts`, `suites/examples/saucedemo-login.qaml.yaml` |
+| Create | `src/suite/schema.ts`, `src/suite/loader.ts`, `tests/suite/loader.test.ts`, `suites/examples/saucedemo-login.qaml.yaml` |
 
 ## Verification
 
-- `bun test` passes (fully offline).
+- `bun run test` (vitest) passes (fully offline).
 - Loading the example suite with the env vars set succeeds; unsetting one
   produces a clear error.
 - `bunx tsc --noEmit` passes.

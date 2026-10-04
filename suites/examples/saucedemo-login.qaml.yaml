@@ -1,0 +1,30 @@
+# suites/examples/saucedemo-login.qaml.yaml
+name: Sauce demo login and cart
+description: Validate the standard login and add-to-cart flow
+base_url: https://www.saucedemo.com
+config:
+  max_actions_per_step: 30      # Jev decision-cycle budget per step
+  step_timeout_ms: 120000
+  continue_on_failure: false
+  verdict_threshold: 0.7        # Jev noul probability required to pass
+  operation_confidence_threshold: 0.55  # below this the loop WAITs, then BLOCKs
+session:                        # optional, forwarded to Steel
+  block_ads: true
+  dimensions: { width: 1280, height: 800 }
+  # proxy_url: user:pass@host:port   # bring-your-own proxy (local + cloud)
+  # Cloud-only keys (use_proxy, solve_captcha) are rejected when the
+  # configured Steel instance is local — see stage 02.
+env:                            # names that must exist in process env
+  - SAUCE_USERNAME
+  - SAUCE_PASSWORD
+steps:
+  - id: login
+    instruction: >-
+      Log in with username ${SAUCE_USERNAME} and password ${SAUCE_PASSWORD}.
+    expect: The inventory page is shown and the products list is visible.
+  - id: add-to-cart
+    instruction: Add the first product in the list to the cart.
+    expect: The cart badge shows 1 item.
+  - id: open-cart
+    instruction: Open the cart page.
+    expect: The cart page lists exactly the product that was added.

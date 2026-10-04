@@ -31,7 +31,7 @@
 
 ## Tests
 
-- Tests: vitest; `vitest.config.ts` only wires up the tsconfig alias, discovery is default (`tests/**/*.test.ts`). Write unit tests in the top-level `tests/` folder, mirroring the `src/` structure (e.g. `tests/utils/config.test.ts` for `src/utils/config.ts`; planned: `tests/suite/loader.test.ts`, `tests/report/report.test.ts`), importing `describe`/`it`/`expect` from `"vitest"` and source via the `@/` alias. Keep tests out of `src/`. Unit tests must run fully offline — no Steel or TypeSafe calls; live smokes that need real services go in `scripts/`, not the vitest suite. Run with `bun run test` (single run) or `bun run test:watch` (watch mode).
+- Tests: vitest; `vitest.config.ts` only wires up the tsconfig alias, discovery is default (`tests/**/*.test.ts`). Write unit tests in the top-level `tests/` folder, mirroring the `src/` structure (e.g. `tests/suite/loader.test.ts` for `src/suite/loader.ts`; planned: `tests/report/report.test.ts`), importing `describe`/`it`/`expect` from `"vitest"` and source via the `@/` alias. Keep tests out of `src/`. Unit tests must run fully offline — no Steel or TypeSafe calls; live smokes that need real services go in `scripts/`, not the vitest suite. Run with `bun run test` (single run) or `bun run test:watch` (watch mode).
 
 ## Gitignore
 
