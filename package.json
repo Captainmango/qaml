@@ -6,6 +6,7 @@
   "scripts": {
     "start": "bun run index.ts",
     "qaml": "bun run index.ts",
+    "mcp": "bun run src/mcp/server.ts",
     "typecheck": "bunx tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -28,6 +29,7 @@
     "typescript": "^7"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@typesafe-ai/sdk": "^0.6.0",
     "browser-use": "^0.8.0",
     "commander": "^15.0.0",

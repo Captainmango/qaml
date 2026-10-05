@@ -49,10 +49,68 @@ Stop the browser when done:
 bun run steel:down
 ```
 
+## MCP server
+
+QAML also runs as an [MCP](https://modelcontextprotocol.io) stdio server, so a coding assistant can validate and run suites mid-conversation:
+
+```bash
+bun run mcp   # = bun run src/mcp/server.ts
+```
+
+It exposes two tools:
+
+- **`validate_suite`** — `{ suite }` (YAML text) → `{ valid, errors, stepCount }`. Offline; no Steel or model calls.
+- **`run_suite`** — `{ suite, baseUrlOverride?, continueOnFailure?, maxActionsPerStep?, verdictThreshold? }` → structured result mirroring `report.json` (overall status, per-step `{ id, status, probability, durationMs }`, token/cycle totals, report paths, Steel viewer URL). Blocks for the whole run; suite config + Steel `timeoutMs` bound the worst case. The exact suite YAML is copied into the run dir (`suite.qaml.yaml`) for auditability.
+
+Errors the assistant can act on (invalid suite, unreachable Steel, missing keys) come back as MCP tool-error results with an actionable message — never a stack trace.
+
+Environment comes from the assistant's MCP server config — put the keys in the registration's environment block, **not** in any committed file. `STEEL_API_KEY` is only needed for Steel Cloud (a non-localhost `STEEL_BASE_URL`); `QAML_TEXT_MODEL*` only for steps that type text.
+
+`opencode.json`:
+
+```json
+{
+  "mcp": {
+    "qaml": {
+      "type": "local",
+      "command": ["bun", "run", "/abs/path/to/qaml/src/mcp/server.ts"],
+      "environment": {
+        "STEEL_BASE_URL": "http://localhost:3000",
+        "QAML_DECISION_MODEL_API_KEY": "…",
+        "QAML_TEXT_MODEL": "…",
+        "QAML_TEXT_MODEL_API_KEY": "…"
+      }
+    }
+  }
+}
+```
+
+Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "qaml": {
+      "command": "bun",
+      "args": ["run", "/abs/path/to/qaml/src/mcp/server.ts"],
+      "env": {
+        "STEEL_BASE_URL": "http://localhost:3000",
+        "QAML_DECISION_MODEL_API_KEY": "…",
+        "QAML_TEXT_MODEL": "…",
+        "QAML_TEXT_MODEL_API_KEY": "…"
+      }
+    }
+  }
+}
+```
+
+To explore the tools by hand: `bunx @modelcontextprotocol/inspector bun run src/mcp/server.ts`.
+
 ## Development
 
 ```bash
 bun run test        # vitest unit tests (offline)
 bun run typecheck   # tsc --noEmit
 bun run check       # Biome lint + format
+bun run scripts/mcp-smoke.ts   # offline MCP end-to-end smoke (spawns the server)
 ```

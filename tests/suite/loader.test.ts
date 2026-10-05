@@ -1,11 +1,11 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: these tests assert
 // on literal ${VAR} placeholders — that syntax is the subject under test.
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadSuite } from "@/suite/loader.ts";
+import { INLINE_SUITE_SOURCE, loadSuite, parseSuite } from "@/suite/loader.ts";
 import { SUITE_CONFIG_DEFAULTS } from "@/suite/schema.ts";
 
 const EXAMPLE_SUITE_PATH = fileURLToPath(
@@ -165,6 +165,9 @@ ${MINIMAL_STEP_YAML}`);
       "login",
       "add-to-cart",
       "open-cart",
+      "go-to-checkout",
+      "fill-out-checkout-details",
+      "checkout-basket",
     ]);
     expect(suite.steps[0]?.instruction).toBe(
       "Log in with username standard_user and password secret_sauce.",
@@ -380,6 +383,57 @@ steps:
     const suite = await loadSuite(path, {});
     expect(suite.steps[0]?.instruction).toBe(
       "Price is ${100} off and ${} stays literal.",
+    );
+  });
+});
+
+describe("parseSuite — text from anywhere (the MCP seam)", () => {
+  it("parses valid YAML text like loadSuite, with a custom source label", () => {
+    const suite = parseSuite(VALID_SUITE_YAML, "generated.yaml", SUITE_ENV);
+
+    expect(suite.name).toBe("Example suite");
+    expect(suite.baseUrl).toBe("https://example.com");
+    expect(suite.config).toEqual(SUITE_CONFIG_DEFAULTS);
+    expect(suite.steps[0]?.instruction).toBe(
+      "Log in as standard_user with password secret_sauce.",
+    );
+    expect(suite.steps[0]?.rawInstruction).toContain("${APP_USER}");
+    expect(Object.isFrozen(suite)).toBe(true);
+  });
+
+  it("labels parse and schema errors with the given source", () => {
+    expect(() =>
+      parseSuite("name: Broken\nsteps: [1, 2\n", "generated.yaml"),
+    ).toThrow(/^generated\.yaml:\d+:\d+: YAML syntax error — /);
+    expect(() => parseSuite("- a list\n", "generated.yaml")).toThrow(
+      /^generated\.yaml: a suite must be a YAML mapping/,
+    );
+    expect(() => parseSuite("steps: []\n", "generated.yaml")).toThrow(
+      /^Invalid suite generated\.yaml:/,
+    );
+  });
+
+  it("falls back to the <inline> source label", () => {
+    expect(() => parseSuite("steps: []\n")).toThrow(
+      new RegExp(`Invalid suite ${INLINE_SUITE_SOURCE}:`),
+    );
+  });
+
+  it("checks and interpolates env exactly like loadSuite", () => {
+    expect(() => parseSuite(VALID_SUITE_YAML, "generated.yaml", {})).toThrow(
+      /APP_USER \(declared under `env:`\)/,
+    );
+    expect(() => parseSuite(VALID_SUITE_YAML, "generated.yaml")).toThrow(
+      /APP_USER/,
+    );
+  });
+
+  it("loadSuite is parseSuite over the file text", async () => {
+    const path = await writeSuite(VALID_SUITE_YAML);
+    const text = await readFile(path, "utf8");
+
+    expect(await loadSuite(path, SUITE_ENV)).toEqual(
+      parseSuite(text, path, SUITE_ENV),
     );
   });
 });

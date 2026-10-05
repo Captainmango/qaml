@@ -71,13 +71,13 @@ committed config — these snippets are documentation only.
 
 ## Tasks
 
-- [ ] `bun add @modelcontextprotocol/sdk`.
-- [ ] Refactor loader into `parseSuite`/`loadSuite` if needed (stage 04).
-- [ ] Implement `src/mcp/server.ts` with the two tools (zod input schemas,
+- [x] `bun add @modelcontextprotocol/sdk`.
+- [x] Refactor loader into `parseSuite`/`loadSuite` if needed (stage 04).
+- [x] Implement `src/mcp/server.ts` with the two tools (zod input schemas,
   structured output, clean error mapping).
-- [ ] Ensure the runner's progress callback is silenced/redirected in MCP mode
+- [x] Ensure the runner's progress callback is silenced/redirected in MCP mode
   (stdout is the protocol channel — no stray prints).
-- [ ] Add `scripts/mcp-smoke.ts`: spawn the server over stdio, call
+- [x] Add `scripts/mcp-smoke.ts`: spawn the server over stdio, call
   `validate_suite` (offline) — live `run_suite` checked manually via inspector.
 
 ## Files
