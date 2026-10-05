@@ -97,13 +97,18 @@ function formatSeconds(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-/** The raw (pre-interpolation) expectation for a step, when the suite is known. */
+/**
+ * The raw (pre-interpolation) expectation for a step: a string when the
+ * suite is known and the step has one, null when the step has NO expectation
+ * (unjudged by design), undefined when the suite is unknown.
+ */
 function rawExpectation(
   suite: QamlSuite | undefined,
   stepId: string,
-): string | null {
+): string | null | undefined {
   const step = suite?.steps.find((candidate) => candidate.id === stepId);
-  return step ? step.rawExpect : null;
+  if (!step) return undefined;
+  return step.rawExpect ?? null;
 }
 
 /** Screenshot as a run-dir-relative Markdown link, or an honest fallback. */
@@ -137,10 +142,16 @@ function formatStepDetail(
   suite?: QamlSuite,
 ): string[] {
   const expectation = rawExpectation(suite, step.stepId);
+  const expectationText =
+    expectation === undefined
+      ? "_(unavailable — writeReport was called without the suite)_"
+      : expectation === null
+        ? "_(none — this step is not judged)_"
+        : expectation;
   const lines = [
     `### ${index + 1}. ${step.stepId} — ${step.status}`,
     "",
-    `- **Expectation (raw):** ${expectation ?? "_(unavailable — writeReport was called without the suite)_"}`,
+    `- **Expectation (raw):** ${expectationText}`,
     `- **Verdict:** ${verdictText(step)}`,
     `- **Actor:** ${step.agent.status} · ${step.agent.cycles} cycles · ${formatSeconds(step.agent.durationMs)}`,
   ];

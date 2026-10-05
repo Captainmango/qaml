@@ -1,6 +1,6 @@
 # Q.A.M.L.
 
-**Quality Assurance Minus the Labour.** QAML is a browser QA agent: you write a test suite as plain-English steps in a YAML file, and QAML drives a real browser to execute them. Each step is attempted by an LLM decision loop and then independently judged against your `expect` criteria, producing a pass/fail report (`report.json` + `report.md`) per run.
+**Quality Assurance Minus the Labour.** QAML is a browser QA agent: you write a test suite as plain-English steps in a YAML file, and QAML drives a real browser to execute them. Each step is attempted by an LLM decision loop and then independently judged against your `expect` criteria — `expect` is optional: a step without one passes once the actor completes it. QAML waits adaptively for the page to settle (load complete + DOM quiet) — after each action and before judging — so slow sites are never observed mid-load. The waits are probe-driven, not fixed sleeps: a fast page proceeds in ~200ms, a slow one gets up to `action_settle_ms` per action, and the actor treats a still-changing page as slow rather than stuck (it only gives up once the page stands still and keeps failing). Runs produce a pass/fail report (`report.json` + `report.md`) per run.
 
 Suites look like this (`suites/examples/saucedemo-login.qaml.yaml`):
 

@@ -5,7 +5,7 @@ import type {
   SystemOneResult,
 } from "@typesafe-ai/sdk";
 import type { ActionResult } from "browser-use";
-import type { ActFn } from "@/agent/executor.ts";
+import type { ActFn, SettleFn } from "@/agent/executor.ts";
 import type { SystemOneLike } from "@/agent/jev.ts";
 import type { TextHelper, TextHelperInput } from "@/agent/text.ts";
 import type { BrowserSnapshot, SnapshotElement } from "@/browser/connection.ts";
@@ -63,6 +63,9 @@ export function makeBrowserSnapshot(
     url: "https://example.com",
     title: "Example",
     elements: [],
+    captcha: false,
+    visibleText: "",
+    sig: "",
     ...overrides,
   };
 }
@@ -188,6 +191,21 @@ export class RecordingAct {
   get names(): string[] {
     return this.calls.map((call) => call.name);
   }
+}
+
+/**
+ * settleFn double: records the caps it was called with; the optional hook
+ * runs per call (loop tests use it to advance the fake clock).
+ */
+export class RecordingSettle {
+  readonly calls: number[] = [];
+
+  constructor(private readonly after?: (ms: number) => void) {}
+
+  readonly fn: SettleFn = async (_session, timeoutMs) => {
+    this.calls.push(timeoutMs);
+    this.after?.(timeoutMs);
+  };
 }
 
 export function fakeTextHelper(

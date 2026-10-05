@@ -479,7 +479,7 @@ export function createQamlMcpServer(deps: McpServerDeps = {}): McpServer {
     {
       title: "Run a QAML suite",
       description:
-        "Run a QAML suite in a Steel browser session: each step is acted out by the Jev decision loop and independently judged against its expectation. Blocks until the run finishes and returns the report (overall status, per-step verdicts, token/cycle totals, report paths, Steel viewer URL). Requires a reachable Steel instance (bun run steel:up) and QAML_DECISION_MODEL_API_KEY in the server environment.",
+        "Run a QAML suite in a Steel browser session: each step is acted out by the Jev decision loop and independently judged against its expectation (steps without `expect` are unjudged — they pass when the actor completes). Blocks until the run finishes and returns the report (overall status, per-step verdicts, token/cycle totals, report paths, Steel viewer URL). Requires a reachable Steel instance (bun run steel:up) and QAML_DECISION_MODEL_API_KEY in the server environment.",
       inputSchema: runSuiteInputShape,
       outputSchema: runSuiteOutputShape,
     },

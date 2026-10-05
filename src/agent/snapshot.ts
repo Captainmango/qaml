@@ -53,6 +53,12 @@ export interface PageSnapshot {
   truncated: boolean;
   /** Elements dropped from the raw snapshot (invisible + over the cap). */
   omittedCount: number;
+  /** A visible captcha challenge wall covers the page (iframe-hidden). */
+  captcha: boolean;
+  /** Capped visible-text excerpt — loading banners, errors, headings. */
+  visibleText: string;
+  /** Physical page signature (see BrowserSnapshot.sig). */
+  sig: string;
 }
 
 /** Input types that receive text; everything else is click-only. */
@@ -155,6 +161,9 @@ export function buildPageSnapshot(snapshot: BrowserSnapshot): PageSnapshot {
     elements: kept.map(toAgentElement),
     truncated: kept.length < visible.length,
     omittedCount: hiddenCount + (visible.length - kept.length),
+    captcha: snapshot.captcha,
+    visibleText: snapshot.visibleText,
+    sig: snapshot.sig,
   };
 }
 
@@ -163,6 +172,24 @@ export function elementDescription(element: IndexedElement): string {
   const name = element.name ? ` ${element.name}` : "";
   const value = element.value ? ` · ${element.value}` : "";
   return `[${element.index}] ${element.role}${name}${value}`;
+}
+
+/**
+ * Cheap change-detection fingerprint of a snapshot, for the loop's slow-page
+ * recovery: identical URL + title + element table → identical string, any
+ * visible reaction (navigation, re-render, new/renamed/re-valued control)
+ * changes it. Deliberately coarse — it answers "did the page move at all?",
+ * not "what moved". Capped-table pages (>SNAPSHOT_ELEMENT_CAP) fingerprint
+ * only what Jev can see, which is exactly the part decisions depend on.
+ */
+export function pageFingerprint(snapshot: PageSnapshot): string {
+  const elements = snapshot.elements
+    .map(
+      (element) =>
+        `${element.index}:${element.role}:${element.name}:${element.value ?? ""}`,
+    )
+    .join("|");
+  return `${snapshot.url}\n${snapshot.title}\n${elements}`;
 }
 
 export function findElement(

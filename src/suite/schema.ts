@@ -28,8 +28,23 @@ const ENV_VAR_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export interface QamlSuiteConfig {
   /** Jev decision-cycle budget per step. */
   maxActionsPerStep: number;
-  /** Hard cap for one step, act + judge. */
+  /** Hard cap for one step, act + settle + judge. */
   stepTimeoutMs: number;
+  /**
+   * Cap on the post-act page-settle wait (readyState + DOM quiet) before the
+   * judge and evidence observe the page. Slow sites are not judged mid-load;
+   * pages that never go quiet (spinners, carousels) proceed at the cap.
+   */
+  settleTimeoutMs: number;
+  /**
+   * Cap on the actor loop's ADAPTIVE settle waits (ms): after every browser
+   * action, and while recovering from a failed/discarded cycle, the page is
+   * probed (readyState + DOM size) and the wait ends as soon as it goes
+   * quiet. Not a fixed sleep — a fast site pays ~200ms per action; raise
+   * this for sites with slow UI reactions (maps, search results, checkout
+   * re-renders) so the actor keeps giving the page room to respond.
+   */
+  actionSettleMs: number;
   /** When false (default), the run short-circuits on the first failure. */
   continueOnFailure: boolean;
   /**
@@ -63,11 +78,14 @@ export interface QamlStep {
   id: string;
   /** Interpolated — what the actor receives. */
   instruction: string;
-  /** Interpolated — what the judge checks. */
-  expect: string;
+  /**
+   * Interpolated — what the judge checks. Optional: a step without an
+   * expectation is not judged; it passes when the actor completes it.
+   */
+  expect?: string;
   /** As authored, `${VAR}` placeholders intact — what reports show. */
   rawInstruction: string;
-  rawExpect: string;
+  rawExpect?: string;
 }
 
 export interface QamlSuite {
@@ -85,6 +103,8 @@ export interface QamlSuite {
 export const SUITE_CONFIG_DEFAULTS = {
   maxActionsPerStep: 30,
   stepTimeoutMs: 120_000,
+  settleTimeoutMs: 10_000,
+  actionSettleMs: 3_000,
   continueOnFailure: false,
   clearBrowserState: false,
   verdictThreshold: 0.7,
@@ -106,6 +126,16 @@ const suiteConfigSchema = z
       .int(positiveIntMessage)
       .min(1, positiveIntMessage)
       .default(SUITE_CONFIG_DEFAULTS.stepTimeoutMs),
+    settle_timeout_ms: z
+      .number()
+      .int(positiveIntMessage)
+      .min(1, positiveIntMessage)
+      .default(SUITE_CONFIG_DEFAULTS.settleTimeoutMs),
+    action_settle_ms: z
+      .number()
+      .int(positiveIntMessage)
+      .min(1, positiveIntMessage)
+      .default(SUITE_CONFIG_DEFAULTS.actionSettleMs),
     continue_on_failure: z
       .boolean()
       .default(SUITE_CONFIG_DEFAULTS.continueOnFailure),
@@ -127,6 +157,8 @@ const suiteConfigSchema = z
     (config): QamlSuiteConfig => ({
       maxActionsPerStep: config.max_actions_per_step,
       stepTimeoutMs: config.step_timeout_ms,
+      settleTimeoutMs: config.settle_timeout_ms,
+      actionSettleMs: config.action_settle_ms,
       continueOnFailure: config.continue_on_failure,
       clearBrowserState: config.clear_browser_state,
       verdictThreshold: config.verdict_threshold,
@@ -172,17 +204,20 @@ const stepSchema = z
         'Must be kebab-case (e.g. "add-to-cart") — it is used for artifact names',
       ),
     instruction: z.string().min(1, "Must not be empty"),
-    expect: z.string().min(1, "Must not be empty"),
+    expect: z.string().min(1, "Must not be empty").optional(),
   })
   .transform(
     (step): QamlStep => ({
       id: step.id,
       // At this point both copies are the raw, authored strings; the loader
       // interpolates `instruction`/`expect` and leaves the raw ones intact.
+      // An absent `expect` stays absent — the step is simply not judged.
       instruction: step.instruction,
-      expect: step.expect,
       rawInstruction: step.instruction,
-      rawExpect: step.expect,
+      ...(step.expect !== undefined && {
+        expect: step.expect,
+        rawExpect: step.expect,
+      }),
     }),
   );
 

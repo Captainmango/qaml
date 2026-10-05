@@ -4,6 +4,7 @@ import {
   elementDescription,
   findElement,
   jevElements,
+  pageFingerprint,
   SNAPSHOT_ELEMENT_CAP,
   selectableElements,
   typeableElements,
@@ -206,5 +207,85 @@ describe("jevElements", () => {
       "name",
       "role",
     ]);
+  });
+});
+
+describe("buildPageSnapshot — captcha flag", () => {
+  it("passes the raw captcha flag through to the page snapshot", () => {
+    expect(
+      buildPageSnapshot(makeBrowserSnapshot({ captcha: true })).captcha,
+    ).toBe(true);
+    expect(buildPageSnapshot(makeBrowserSnapshot()).captcha).toBe(false);
+  });
+});
+
+describe("pageFingerprint", () => {
+  function page(overrides: Parameters<typeof makeBrowserSnapshot>[0] = {}) {
+    return buildPageSnapshot(
+      makeBrowserSnapshot({
+        url: "https://example.com/results",
+        title: "Results",
+        elements: [makeSnapshotElement(1, { tag: "button", text: "Reserve" })],
+        ...overrides,
+      }),
+    );
+  }
+
+  it("is stable for identical snapshots", () => {
+    expect(pageFingerprint(page())).toBe(pageFingerprint(page()));
+  });
+
+  it("changes when the url, title, or element table changes", () => {
+    const base = pageFingerprint(page());
+    expect(
+      pageFingerprint(page({ url: "https://example.com/checkout" })),
+    ).not.toBe(base);
+    expect(pageFingerprint(page({ title: "Checkout" }))).not.toBe(base);
+    expect(
+      pageFingerprint(
+        page({
+          elements: [
+            makeSnapshotElement(1, { tag: "button", text: "Reserve" }),
+            makeSnapshotElement(2, { tag: "button", text: "Cancel" }),
+          ],
+        }),
+      ),
+    ).not.toBe(base);
+  });
+
+  it("changes when an element is renamed or re-valued in place", () => {
+    const base = pageFingerprint(page());
+    expect(
+      pageFingerprint(
+        page({
+          elements: [
+            makeSnapshotElement(1, { tag: "button", text: "Reserving…" }),
+          ],
+        }),
+      ),
+    ).not.toBe(base);
+    expect(
+      pageFingerprint(
+        page({
+          elements: [
+            makeSnapshotElement(1, {
+              tag: "input",
+              attributes: { type: "text", name: "Postcode", value: "NW1" },
+            }),
+          ],
+        }),
+      ),
+    ).not.toBe(
+      pageFingerprint(
+        page({
+          elements: [
+            makeSnapshotElement(1, {
+              tag: "input",
+              attributes: { type: "text", name: "Postcode", value: "NW1 8TR" },
+            }),
+          ],
+        }),
+      ),
+    );
   });
 });

@@ -155,9 +155,11 @@ function interpolateStep(
     instruction: interpolateText(step.rawInstruction, env, (name) =>
       recordMissing(missing, name, env, `used by ${location} instruction`),
     ),
-    expect: interpolateText(step.rawExpect, env, (name) =>
-      recordMissing(missing, name, env, `used by ${location} expectation`),
-    ),
+    ...(step.rawExpect !== undefined && {
+      expect: interpolateText(step.rawExpect, env, (name) =>
+        recordMissing(missing, name, env, `used by ${location} expectation`),
+      ),
+    }),
   };
 }
 

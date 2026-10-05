@@ -5,6 +5,9 @@ base_url: https://www.saucedemo.com
 config:
   max_actions_per_step: 30      # Jev decision-cycle budget per step
   step_timeout_ms: 120000
+  # action_settle_ms: 3000      # cap on the adaptive in-loop settle waits —
+                                # probe-based (readyState + DOM quiet), never a
+                                # fixed sleep; raise it for slow-reacting sites
   continue_on_failure: false
   # clear_browser_state: true   # wipe cookies/storage at base_url before step 1
                                 # (off by default: state carries into the run)

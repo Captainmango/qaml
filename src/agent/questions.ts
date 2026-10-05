@@ -36,6 +36,7 @@ export const OPERATIONS = [
   "SELECT",
   "SCROLL_DOWN",
   "SCROLL_UP",
+  "PRESS_ESCAPE",
   "WAIT",
   "DONE",
   "BLOCKED",
@@ -57,6 +58,8 @@ const OPERATION_DESCRIPTIONS: Record<Operation, string> = {
   SELECT: "Choose an option in a native dropdown (select/combobox)",
   SCROLL_DOWN: "Scroll the page down to reveal content below the viewport",
   SCROLL_UP: "Scroll the page up to reveal content above the viewport",
+  PRESS_ESCAPE:
+    "Press the Escape key to dismiss an open overlay (photo lightbox, modal, cookie wall, open dropdown) that hides the rest of the page",
   WAIT: "Wait briefly for the page to finish loading or settling",
   DONE: "The goal is already fully achieved on the current page — nothing left to do (earlier actions may have completed it)",
   BLOCKED:
@@ -155,6 +158,18 @@ export function buildDecisionState(
   if (snapshot.truncated) {
     // The table is capped; more elements may exist off-table (scroll to see).
     state.elements_truncated = true;
+  }
+  if (snapshot.captcha) {
+    // The wall itself is iframe-hidden (invisible to the table and the
+    // visible-text probe) — name it so Jev blocks honestly instead of
+    // guessing at a form that will never submit.
+    state.captcha_wall = true;
+  }
+  if (snapshot.visibleText) {
+    // The table only sees interactive elements; the text excerpt is how Jev
+    // notices "Finding parking spaces…", error messages, and other slow-site
+    // states that are visible but not clickable.
+    state.visible_text = snapshot.visibleText;
   }
   const recent = recentActionsForState(input.recentActions);
   if (recent.length > 0) state.recent_actions = recent;

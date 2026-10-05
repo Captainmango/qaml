@@ -9,6 +9,7 @@ import type {
   BrowserSessionLike,
   BrowserSnapshot,
 } from "@/browser/connection.ts";
+import { SUITE_CONFIG_DEFAULTS } from "@/suite/schema.ts";
 import {
   decisionResult,
   FakeClock,
@@ -16,6 +17,7 @@ import {
   makeBrowserSnapshot,
   makeSnapshotElement,
   RecordingAct,
+  RecordingSettle,
   ScriptedJev,
 } from "./helpers.ts";
 
@@ -66,17 +68,23 @@ interface HarnessOptions {
   act?: RecordingAct;
 }
 
+/** What one settle wait costs on the fake clock (10ms per snapshot). */
+const FAKE_SETTLE_MS = 20;
+
 /** Wires the loop's injectable seams around a fake clock (10ms per snapshot). */
 function harness(options: HarnessOptions) {
   const clock = new FakeClock();
   const act = options.act ?? new RecordingAct();
+  const settle = new RecordingSettle(() => clock.advance(FAKE_SETTLE_MS));
+  const quietSettle = new RecordingSettle(() => clock.advance(FAKE_SETTLE_MS));
   const pages = options.pages ?? [loginPage()];
   let snapshotCalls = 0;
   const deps: DecisionLoopDeps = {
     jev: options.jev,
     textHelper: options.textHelper === undefined ? null : options.textHelper,
     actFn: act.fn,
-    delayFn: clock.delay,
+    settleFn: settle.fn,
+    quietSettleFn: quietSettle.fn,
     now: clock.now,
     snapshotFn: async () => {
       snapshotCalls += 1;
@@ -86,10 +94,19 @@ function harness(options: HarnessOptions) {
       }
       const page = pages[Math.min(snapshotCalls - 1, pages.length - 1)];
       if (!page) throw new Error("no page scripted");
-      return page;
+      // Unique physical signature per snapshot unless the test scripts one,
+      // so no-op detection only fires when a test wants it to.
+      return page.sig === "" ? { ...page, sig: `snap-${snapshotCalls}` } : page;
     },
   };
-  return { clock, act, deps, snapshotCalls: () => snapshotCalls };
+  return {
+    clock,
+    act,
+    settle,
+    quietSettle,
+    deps,
+    snapshotCalls: () => snapshotCalls,
+  };
 }
 
 const GOAL = "Log in with username standard_user and password secret_sauce";
@@ -103,7 +120,7 @@ describe("runDecisionLoop — happy path", () => {
       decisionResult({ operation: ["DONE", 0.99] }),
     ]);
     const textHelper = fakeTextHelper(["standard_user", "secret_sauce"]);
-    const { clock, act, deps } = harness({ jev, textHelper });
+    const { clock, act, settle, deps } = harness({ jev, textHelper });
 
     const result = await runDecisionLoop({
       browser: session,
@@ -139,8 +156,13 @@ describe("runDecisionLoop — happy path", () => {
       { name: "input_text", params: { index: 2, text: "secret_sauce" } },
       { name: "click_element_by_index", params: { index: 3 } },
     ]);
-    // Executor settle budgets: 200ms after each type, 50ms after the click.
-    expect(clock.delays).toEqual([200, 200, 50]);
+    // One adaptive settle after each executed action (2 types + 1 click),
+    // each capped by the suite's action_settle_ms.
+    expect(settle.calls).toEqual([
+      SUITE_CONFIG_DEFAULTS.actionSettleMs,
+      SUITE_CONFIG_DEFAULTS.actionSettleMs,
+      SUITE_CONFIG_DEFAULTS.actionSettleMs,
+    ]);
 
     // The text helper got the goal + field context.
     expect(textHelper.inputs[1]?.element).toEqual({
@@ -195,7 +217,7 @@ describe("runDecisionLoop — confidence guard", () => {
       decisionResult({ operation: ["CLICK", 0.3], click_target: "3" }),
       decisionResult({ operation: ["TYPE_TEXT", 0.4], type_target: "1" }),
     ]);
-    const { act, deps } = harness({ jev });
+    const { act, settle, quietSettle, deps } = harness({ jev });
 
     const result = await runDecisionLoop({
       browser: session,
@@ -209,8 +231,11 @@ describe("runDecisionLoop — confidence guard", () => {
     expect(result.actions[0]?.operation).toBe("WAIT");
     expect(result.actions[0]?.note).toMatch(/confidence 0\.30 below 0\.55/);
     expect(result.actions[1]?.note).toMatch(/blocked/);
-    // Only the guard's WAIT ever executed — never the low-confidence click.
-    expect(act.names).toEqual(["wait"]);
+    // The guard's wait is a quiet-based settle, never a browser action —
+    // the low-confidence click itself must not reach the page.
+    expect(act.calls).toEqual([]);
+    expect(quietSettle.calls).toHaveLength(1);
+    expect(settle.calls).toHaveLength(0);
   });
 
   it("resets the streak after a confident cycle", async () => {
@@ -218,6 +243,27 @@ describe("runDecisionLoop — confidence guard", () => {
       decisionResult({ operation: ["CLICK", 0.3], click_target: "3" }),
       decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
       decisionResult({ operation: ["SCROLL_DOWN", 0.2] }),
+      decisionResult({ operation: ["DONE", 0.99] }),
+    ]);
+    const { act, settle, quietSettle, deps } = harness({ jev });
+
+    const result = await runDecisionLoop({
+      browser: session,
+      goal: GOAL,
+      deps,
+    });
+
+    expect(result.status).toBe("done");
+    // SCROLL is safe: it runs at 0.2 confidence instead of tripping the gate.
+    expect(act.names).toEqual(["click_element_by_index", "scroll"]);
+    expect(quietSettle.calls).toHaveLength(1);
+    expect(settle.calls).toHaveLength(2);
+  });
+
+  it("runs safe operations at low confidence instead of blocking", async () => {
+    const jev = new ScriptedJev([
+      decisionResult({ operation: ["SCROLL_DOWN", 0.2] }),
+      decisionResult({ operation: ["WAIT", 0.3] }),
       decisionResult({ operation: ["DONE", 0.99] }),
     ]);
     const { act, deps } = harness({ jev });
@@ -229,7 +275,47 @@ describe("runDecisionLoop — confidence guard", () => {
     });
 
     expect(result.status).toBe("done");
-    expect(act.names).toEqual(["wait", "click_element_by_index", "wait"]);
+    expect(act.names).toEqual(["scroll", "wait"]);
+  });
+
+  it("blocks a hesitation loop of low-confidence WAITs", async () => {
+    const jev = new ScriptedJev([
+      decisionResult({ operation: ["WAIT", 0.3] }),
+      decisionResult({ operation: ["WAIT", 0.4] }),
+      decisionResult({ operation: ["WAIT", 0.2] }),
+    ]);
+    const { act, deps } = harness({ jev });
+
+    const result = await runDecisionLoop({
+      browser: session,
+      goal: GOAL,
+      deps,
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.actions).toHaveLength(3);
+    expect(result.actions[2]?.note).toMatch(/low-confidence WAIT cycles/);
+    expect(act.names).toEqual(["wait", "wait"]);
+  });
+
+  it("blocks low-confidence scroll wandering on an unchanged page", async () => {
+    const jev = new ScriptedJev([
+      decisionResult({ operation: ["SCROLL_DOWN", 0.2] }),
+      decisionResult({ operation: ["SCROLL_DOWN", 0.25] }),
+      decisionResult({ operation: ["SCROLL_UP", 0.3] }),
+    ]);
+    const { act, deps } = harness({ jev });
+
+    const result = await runDecisionLoop({
+      browser: session,
+      goal: GOAL,
+      deps,
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.actions).toHaveLength(3);
+    expect(result.actions[2]?.note).toMatch(/low-confidence SCROLL_UP cycles/);
+    expect(act.names).toEqual(["scroll", "scroll"]);
   });
 });
 
@@ -241,7 +327,7 @@ describe("runDecisionLoop — staleness and waste guards", () => {
       decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
       decisionResult({ operation: ["DONE", 0.99] }),
     ]);
-    const { act, deps } = harness({ jev });
+    const { act, settle, quietSettle, deps } = harness({ jev });
 
     const result = await runDecisionLoop({
       browser: session,
@@ -255,6 +341,10 @@ describe("runDecisionLoop — staleness and waste guards", () => {
     expect(act.calls).toEqual([
       { name: "click_element_by_index", params: { index: 3 } },
     ]);
+    // Quiet-based recovery settle after the discard + the click's own
+    // reaction-aware settle.
+    expect(quietSettle.calls).toHaveLength(1);
+    expect(settle.calls).toHaveLength(1);
   });
 
   it("blocks after 3 consecutive unusable cycles", async () => {
@@ -263,7 +353,7 @@ describe("runDecisionLoop — staleness and waste guards", () => {
       decisionResult({ operation: ["CLICK", 0.9], click_target: "98" }),
       decisionResult({ operation: ["CLICK", 0.9], click_target: "97" }),
     ]);
-    const { act, deps } = harness({ jev });
+    const { act, settle, quietSettle, deps } = harness({ jev });
 
     const result = await runDecisionLoop({
       browser: session,
@@ -275,6 +365,9 @@ describe("runDecisionLoop — staleness and waste guards", () => {
     expect(result.actions).toHaveLength(3);
     expect(result.actions[2]?.note).toMatch(/blocked — 3 unusable cycles/);
     expect(act.calls).toEqual([]);
+    // Recovery settles after cycles 1 and 2 — the blocking cycle doesn't wait.
+    expect(quietSettle.calls).toHaveLength(2);
+    expect(settle.calls).toHaveLength(0);
   });
 
   it("notes failed actions and blocks on a streak of them", async () => {
@@ -284,7 +377,7 @@ describe("runDecisionLoop — staleness and waste guards", () => {
       decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
     ]);
     const act = new RecordingAct(() => ({ error: "element not clickable" }));
-    const { deps } = harness({ jev, act });
+    const { settle, quietSettle, deps } = harness({ jev, act });
 
     const result = await runDecisionLoop({
       browser: session,
@@ -298,6 +391,172 @@ describe("runDecisionLoop — staleness and waste guards", () => {
     );
     expect(result.actions[2]?.note).toMatch(/blocked/);
     expect(act.calls).toHaveLength(3);
+    // One reaction-aware settle per failed action (executor-level) — the
+    // waste guard does not stack a second recovery window on top.
+    expect(settle.calls).toHaveLength(3);
+    expect(quietSettle.calls).toHaveLength(0);
+  });
+});
+
+describe("runDecisionLoop — slow-page recovery", () => {
+  /** A page mid-transition: same interactive table, different URL each time. */
+  function reactingPage(reaction: number): BrowserSnapshot {
+    return makeBrowserSnapshot({
+      url: `https://slow.example/results?r=${reaction}`,
+      title: `Loading ${reaction}`,
+      elements: [makeSnapshotElement(3, { tag: "button", text: "Reserve" })],
+    });
+  }
+
+  it("keeps recovering while failed cycles coincide with a changing page", async () => {
+    const jev = new ScriptedJev([
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+      decisionResult({ operation: ["DONE", 0.99] }),
+    ]);
+    const act = new RecordingAct(() => ({ error: "element not clickable" }));
+    const { deps } = harness({
+      jev,
+      act,
+      pages: [0, 1, 2, 3, 4, 5].map(reactingPage),
+    });
+
+    const result = await runDecisionLoop({
+      browser: session,
+      goal: "Reserve the space",
+      deps,
+    });
+
+    // Five failures would normally block at three — but the page kept
+    // responding, so the streak never reached the guard.
+    expect(result.status).toBe("done");
+    expect(result.cycles).toBe(6);
+    expect(act.calls).toHaveLength(5);
+    expect(result.actions[1]?.note).toMatch(/page changed since cycle 1/);
+    expect(result.actions[1]?.note).toMatch(/action failed/);
+  });
+
+  it("resets the low-confidence streak when the page reacts to the wait", async () => {
+    const jev = new ScriptedJev([
+      decisionResult({ operation: ["CLICK", 0.3], click_target: "3" }),
+      decisionResult({ operation: ["CLICK", 0.4], click_target: "3" }),
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+      decisionResult({ operation: ["DONE", 0.99] }),
+    ]);
+    const { act, settle, quietSettle, deps } = harness({
+      jev,
+      pages: [0, 1, 2, 3].map(reactingPage),
+    });
+
+    const result = await runDecisionLoop({
+      browser: session,
+      goal: "Reserve the space",
+      deps,
+    });
+
+    // Two consecutive-ish low-confidence decisions would block at two, but
+    // each wait was followed by a changed page → fresh streaks.
+    expect(result.status).toBe("done");
+    expect(act.names).toEqual(["click_element_by_index"]);
+    // Two guard waits (quiet-based) + the confident click's reaction settle.
+    expect(quietSettle.calls).toHaveLength(2);
+    expect(settle.calls).toHaveLength(1);
+    expect(result.actions[1]?.note).toMatch(/recovery streaks reset/);
+  });
+
+  it("blocks fast on a captcha wall instead of burning the budget", async () => {
+    const jev = new ScriptedJev([
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+    ]);
+    const { act, deps } = harness({
+      jev,
+      pages: [
+        makeBrowserSnapshot({
+          captcha: true,
+          elements: [
+            makeSnapshotElement(3, { tag: "button", text: "Sign in" }),
+          ],
+        }),
+      ],
+    });
+
+    const result = await runDecisionLoop({
+      browser: session,
+      goal: GOAL,
+      deps,
+    });
+
+    // The wall is iframe-hidden — deciding against it would be guesswork.
+    expect(result.status).toBe("blocked");
+    expect(result.cycles).toBe(1);
+    expect(result.actions[0]?.note).toMatch(/captcha wall detected/);
+    expect(act.calls).toEqual([]);
+  });
+
+  it("blocks a click fixation whose successes change nothing", async () => {
+    const jev = new ScriptedJev([
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "3" }),
+    ]);
+    // Same physical signature every cycle: the clicks "succeed" but the
+    // page never moves — a dead control / fixated re-click.
+    const { act, deps } = harness({
+      jev,
+      pages: [
+        makeBrowserSnapshot({
+          sig: "dead",
+          elements: [makeSnapshotElement(3, { tag: "button", text: "Go" })],
+        }),
+      ],
+    });
+
+    const result = await runDecisionLoop({
+      browser: session,
+      goal: GOAL,
+      deps,
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.actions[1]?.note).toMatch(/did not change/);
+    expect(result.actions[3]?.note).toMatch(/changed nothing on the page/);
+    expect(act.calls).toHaveLength(3);
+  });
+
+  it("caps settle waits at action_settle_ms and the remaining budget", async () => {
+    const jev = new ScriptedJev([
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "99" }),
+      decisionResult({ operation: ["DONE", 0.99] }),
+    ]);
+    const { settle, quietSettle, deps } = harness({ jev });
+
+    await runDecisionLoop({
+      browser: session,
+      goal: GOAL,
+      actionSettleMs: 1500,
+      deps,
+    });
+    expect(quietSettle.calls).toEqual([1500]);
+    expect(settle.calls).toEqual([]);
+
+    // With only 60ms of step budget left at the settle point (100ms deadline
+    // minus the snapshot's 10ms and clock reads), the cap shrinks to match.
+    const tightJev = new ScriptedJev([
+      decisionResult({ operation: ["CLICK", 0.9], click_target: "99" }),
+      decisionResult({ operation: ["DONE", 0.99] }),
+    ]);
+    const tight = harness({ jev: tightJev });
+    await runDecisionLoop({
+      browser: session,
+      goal: GOAL,
+      actionSettleMs: 1500,
+      timeoutMs: 100,
+      deps: tight.deps,
+    });
+    expect(tight.quietSettle.calls).toEqual([90]);
   });
 });
 
@@ -330,8 +589,9 @@ describe("runDecisionLoop — budgets", () => {
     ]);
     const { clock, deps } = harness({ jev });
 
-    // Each snapshot burns 30ms of the fake clock; each scroll settle 50ms —
-    // so cycle 1 ends at 80ms (inside the 100ms budget) and cycle 2 at 160ms.
+    // Each snapshot burns 30ms of the fake clock; each post-action settle
+    // 20ms — cycle 1 ends at 50ms (inside the 100ms budget), cycle 2 at
+    // exactly 100ms, so cycle 3 sees the deadline first.
     const slowPages = async (): Promise<BrowserSnapshot> => {
       clock.advance(30);
       return loginPage();

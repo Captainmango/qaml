@@ -13,6 +13,7 @@ import {
   prepareBrowserState,
   screenshot,
   snapshotState,
+  waitForActionSettled,
 } from "@/browser/connection.ts";
 import { writeReport } from "@/report/report.ts";
 import { assertSteelReachable } from "@/steel/health.ts";
@@ -45,7 +46,7 @@ import { loadConfig, type QamlConfig } from "@/utils/config.ts";
  *    session create / connect / prepare / per-step act / judge / screenshot /
  *    teardown / report — and, inside the act loop, per-call timings for
  *    snapshots, Jev calls (classified decision / select / verdict), text
- *    generations, browser actions (by name), and settle sleeps.
+ *    generations, browser actions (by name), and adaptive settle waits.
  *
  * Results land in `<out>/<timestamp>/results.json`; a summary table prints to
  * stdout. See BENCH.md for the methodology and how to read the numbers.
@@ -178,13 +179,6 @@ function wrapHandleRelease(
   };
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolveFn) => {
-    const timer = setTimeout(resolveFn, ms);
-    (timer as { unref?: () => void }).unref?.();
-  });
-}
-
 async function timeIt(fn: () => Promise<unknown>): Promise<number> {
   const start = performance.now();
   await fn();
@@ -289,7 +283,10 @@ async function runInstrumentedStep(
                   recorder.timed(`act.action.${actionName}`, () =>
                     act(session, actionName, params),
                   ),
-                delayFn: (ms) => recorder.timed("act.settle", () => delay(ms)),
+                settleFn: (session, timeoutMs) =>
+                  recorder.timed("act.settle", () =>
+                    waitForActionSettled(session, timeoutMs),
+                  ),
               },
             });
           } finally {

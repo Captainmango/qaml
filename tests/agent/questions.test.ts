@@ -168,6 +168,21 @@ describe("buildDecisionRequest", () => {
     ]);
   });
 
+  it("surfaces the visible-text excerpt and captcha wall in state", () => {
+    const state = buildDecisionState({
+      goal: "g",
+      snapshot: {
+        ...loginSnapshot(),
+        captcha: true,
+        visibleText: "Finding parking spaces…",
+      },
+      recentActions: [],
+    }) as StateObject;
+
+    expect(state.captcha_wall).toBe(true);
+    expect(state.visible_text).toBe("Finding parking spaces…");
+  });
+
   it("sends structured JSON state: goal, page, elements, truncation flag", () => {
     const snapshot = loginSnapshot();
     const state = buildDecisionState({

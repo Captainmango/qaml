@@ -64,7 +64,15 @@ const SCHEMA_BROKEN_YAML = `
 name: Broken suite
 base_url: https://example.com
 steps:
-  - id: missing-expect
+  - id: missing-instruction
+    expect: Something happened.
+`;
+
+const NO_EXPECT_YAML = `
+name: Unjudged steps
+base_url: https://example.com
+steps:
+  - id: just-do-it
     instruction: Do something.
 `;
 
@@ -278,7 +286,21 @@ steps:
     const output = structured<ValidateSuiteOutput>(result);
 
     expect(output?.valid).toBe(false);
-    expect(output?.errors.join("\n")).toContain("steps[0].expect: Required");
+    expect(output?.errors.join("\n")).toContain(
+      "steps[0].instruction: Required",
+    );
+  });
+
+  it("accepts a step without expect — it is simply not judged", async () => {
+    const h = makeHarness();
+    const result = await validateSuiteTool(
+      { suite: NO_EXPECT_YAML },
+      h.resolved,
+    );
+    const output = structured<ValidateSuiteOutput>(result);
+
+    expect(output?.valid).toBe(true);
+    expect(output?.stepCount).toBe(1);
   });
 
   it("answers missing env vars as validation errors naming the variable", async () => {
@@ -487,7 +509,7 @@ describe("runSuiteTool — error mapping", () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(text(result)).toContain("steps[0].expect: Required");
+    expect(text(result)).toContain("steps[0].instruction: Required");
     expect(h.steelChecks).toEqual([]);
     expect(h.runCalls).toEqual([]);
   });

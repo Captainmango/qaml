@@ -225,6 +225,20 @@ export interface BrowserSnapshot {
   title: string;
   /** selector_map extracted to plain data, sorted by element index. */
   elements: SnapshotElement[];
+  /** True when a visible captcha challenge wall covers the page. */
+  captcha: boolean;
+  /**
+   * Capped excerpt of the page's visible text — the loading banners, error
+   * messages and headings that the interactive-element table cannot see
+   * ("Finding parking spaces…" is not clickable, so Jev never sees it).
+   */
+  visibleText: string;
+  /**
+   * Physical page signature (url + node count + scroll + field values) from
+   * the state probe — changes on ANY observable reaction, including ones the
+   * element table misses (typed values, scrolling). "" when unprobeable.
+   */
+  sig: string;
 }
 
 /** Attribute fallback order for the best-effort accessible name. */
@@ -261,20 +275,111 @@ function toSnapshotElement(
 }
 
 /**
- * Extracts `{ url, title, elements }` from the browser state summary's
- * indexed `selector_map`. This is raw material only — formatting the element
- * table for Jev lives in `src/agent/snapshot.ts`.
+ * Extracts `{ url, title, elements, captcha, visibleText, sig }` from the
+ * browser state summary's indexed `selector_map` plus one page-state probe.
+ * This is raw material only — formatting the element table for Jev lives in
+ * `src/agent/snapshot.ts`.
+ *
+ * The probe runs alongside because three things the selector_map cannot see
+ * decide whether a decision is even meaningful: a captcha wall (iframe-
+ * hidden), the page's visible text (loading banners, error messages —
+ * non-interactive, so never indexed), and the physical page signature (used
+ * by the loop to notice actions that changed nothing).
  */
 export async function snapshotState(
   session: BrowserSessionLike,
+  deps: ActDeps = {},
 ): Promise<BrowserSnapshot> {
-  const state = await session.get_browser_state_with_recovery({
-    include_screenshot: false,
-  });
+  const [state, pageState] = await Promise.all([
+    session.get_browser_state_with_recovery({ include_screenshot: false }),
+    probePageState(session, deps),
+  ]);
   const elements = Object.entries(state.selector_map)
     .map(([index, node]) => toSnapshotElement(Number(index), node))
     .sort((a, b) => a.index - b.index);
-  return { url: state.url, title: state.title, elements };
+  return {
+    url: state.url,
+    title: state.title,
+    elements,
+    captcha: pageState.captcha,
+    visibleText: pageState.text,
+    sig: pageState.sig,
+  };
+}
+
+/** How much visible text one decision cycle costs Jev (~175 tokens). */
+const VISIBLE_TEXT_CAP = 700;
+/** Head/tail split of the excerpt: modals and lightboxes are body-end portals. */
+const VISIBLE_TEXT_HEAD = 400;
+const VISIBLE_TEXT_TAIL = 300;
+
+/**
+ * Page-state probe: captcha wall + capped visible text + physical signature
+ * in one evaluate. The text excerpt keeps the head AND the tail of the
+ * document: loading banners live near the top of main, but overlays
+ * (lightboxes, modals) are portals appended at the end of <body> — a
+ * head-only window would hide exactly the thing blocking the page. The
+ * captcha check is size-gated to large provider iframes: invisible tokens
+ * and small checkbox widgets are part of normal flows, not walls.
+ * Best-effort: any probe failure reads as an empty, wall-free page so a
+ * dead browser never masquerades as a captcha problem.
+ */
+const PAGE_STATE_PROBE_CODE =
+  "(() => { const t = document.body.innerText.replace(/\\s+/g, ' ').trim(); return { captcha: Array.from(document.querySelectorAll('iframe')).some((f) => f.offsetWidth > 200 && f.offsetHeight > 200 && /captcha|recaptcha|hcaptcha|arkose|geetest/i.test(f.src || f.title || '')), text: t.length <= " +
+  String(VISIBLE_TEXT_CAP) +
+  " ? t : t.slice(0, " +
+  String(VISIBLE_TEXT_HEAD) +
+  ") + ' … ' + t.slice(-" +
+  String(VISIBLE_TEXT_TAIL) +
+  "), sig: [location.href, document.getElementsByTagName('*').length, window.scrollX, window.scrollY, Array.from(document.querySelectorAll('input,textarea,select')).map((f) => String(f.value.length) + (f.checked ? 'c' : '')).join('.')].join('|') }; })()";
+
+interface PageState {
+  captcha: boolean;
+  text: string;
+  sig: string;
+}
+
+const EMPTY_PAGE_STATE: PageState = { captcha: false, text: "", sig: "" };
+
+function parsePageState(content: unknown): PageState | null {
+  let value: unknown = content;
+  if (typeof content === "string") {
+    try {
+      value = JSON.parse(content);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const { captcha, text, sig } = value as {
+    captcha?: unknown;
+    text?: unknown;
+    sig?: unknown;
+  };
+  if (typeof captcha !== "boolean") return null;
+  return {
+    captcha,
+    text: typeof text === "string" ? text : "",
+    sig: typeof sig === "string" ? sig : "",
+  };
+}
+
+async function probePageState(
+  session: BrowserSessionLike,
+  deps: ActDeps,
+): Promise<PageState> {
+  try {
+    const result = await act(
+      session,
+      BROWSER_ACTIONS.evaluate,
+      { code: PAGE_STATE_PROBE_CODE },
+      deps,
+    );
+    if (result.error) return EMPTY_PAGE_STATE;
+    return parsePageState(result.extracted_content) ?? EMPTY_PAGE_STATE;
+  } catch {
+    return EMPTY_PAGE_STATE;
+  }
 }
 
 // Lazily created — its constructor registers all default actions in memory
@@ -318,6 +423,221 @@ export async function screenshot(session: BrowserSessionLike): Promise<Buffer> {
     throw new Error("browser-use returned no screenshot");
   }
   return Buffer.from(base64, "base64");
+}
+
+/**
+ * Zero-LLM settle probe: a readiness flag, a busy flag, and a cheap
+ * page-state signature (url + element count + scroll position + form-field
+ * signature), JSON-stringified by the `evaluate` action. The signature
+ * changes when the page reacts in any observable way — navigation,
+ * re-render, lazy content, scrolling, typed/checked values — which is what
+ * lets the act-loop settle wait for a REACTION instead of mistaking a silent
+ * slow site for a settled page (a pending form POST keeps the old document
+ * perfectly quiet). The busy flag catches the other slow-site trap: a page
+ * that is quiet AND complete but openly still working ("Finding parking
+ * spaces…", spinners with text) — settled means the work finished, not just
+ * that the DOM paused.
+ */
+const SETTLE_PROBE_CODE =
+  "(() => ({ ready: document.readyState === 'complete', busy: /\\b(loading|finding|searching|fetching|please wait|one moment)\\b/i.test(document.body.innerText), sig: [location.href, document.getElementsByTagName('*').length, window.scrollX, window.scrollY, Array.from(document.querySelectorAll('input,textarea,select')).map((f) => String(f.value.length) + (f.checked ? 'c' : '')).join('.')].join('|') }))()";
+
+export const PAGE_SETTLE_DEFAULTS = {
+  /** Hard cap on the settle wait (the suite's `settle_timeout_ms`). */
+  timeoutMs: 10_000,
+  /** Pause between probes. */
+  pollMs: 250,
+  /** Consecutive ready-and-unchanged probes that count as settled. */
+  stableProbes: 2,
+} as const;
+
+export interface WaitForPageSettledOptions {
+  timeoutMs?: number;
+  pollMs?: number;
+  stableProbes?: number;
+  /** Registry injection for the evaluate probe (tests). */
+  act?: ActDeps;
+  delayFn?: (ms: number) => Promise<void>;
+  now?: () => number;
+}
+
+interface SettleProbe {
+  ready: boolean;
+  busy: boolean;
+  sig: string;
+}
+
+/** Parses the evaluate payload; anything unexpected is null (not settle-able). */
+function parseSettleProbe(content: unknown): SettleProbe | null {
+  let value: unknown = content;
+  if (typeof content === "string") {
+    try {
+      value = JSON.parse(content);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const { ready, sig, busy } = value as {
+    ready?: unknown;
+    sig?: unknown;
+    busy?: unknown;
+  };
+  if (typeof ready !== "boolean" || typeof sig !== "string") return null;
+  return { ready, sig, busy: busy === true };
+}
+
+async function probeSettleState(
+  session: BrowserSessionLike,
+  actDeps: ActDeps,
+): Promise<SettleProbe | null> {
+  const result = await act(
+    session,
+    BROWSER_ACTIONS.evaluate,
+    { code: SETTLE_PROBE_CODE },
+    actDeps,
+  );
+  if (result.error) return null;
+  return parseSettleProbe(result.extracted_content);
+}
+
+/**
+ * Waits until the page looks SETTLED: `document.readyState === 'complete'`
+ * AND the page signature unchanged across `stableProbes` consecutive polls.
+ * Called between the act phase and the judge/evidence reads, so a slow site
+ * is never observed mid-load (a click that navigates, late XHR content) —
+ * browser-use's per-action stability waits do not cover the gap between the
+ * actor's last action and its DONE claim.
+ *
+ * Best-effort by contract: never throws and never exceeds the cap by more
+ * than one poll. A page that cannot be probed (dead browser, evaluate
+ * failure, unparseable payload) returns immediately so the caller proceeds —
+ * the judge or snapshot then surfaces the real failure. A page that never
+ * goes quiet (spinners, carousels, ticking clocks) waits out the cap and
+ * proceeds anyway.
+ */
+export async function waitForPageSettled(
+  session: BrowserSessionLike,
+  options: WaitForPageSettledOptions = {},
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? PAGE_SETTLE_DEFAULTS.timeoutMs;
+  const pollMs = options.pollMs ?? PAGE_SETTLE_DEFAULTS.pollMs;
+  const stableProbes =
+    options.stableProbes ?? PAGE_SETTLE_DEFAULTS.stableProbes;
+  const actDeps = options.act ?? {};
+  const delayFn = options.delayFn ?? delay;
+  const now = options.now ?? (() => Date.now());
+  const deadline = now() + timeoutMs;
+
+  let previousSig: string | null = null;
+  let stable = 0;
+  for (;;) {
+    if (now() >= deadline) return;
+    let probe: SettleProbe | null;
+    try {
+      probe = await probeSettleState(session, actDeps);
+    } catch {
+      return; // unprobeable — proceed; downstream reads surface real failures
+    }
+    if (probe === null) return;
+    if (probe.ready && !probe.busy && probe.sig === previousSig) {
+      stable += 1;
+      if (stable >= stableProbes) return;
+    } else {
+      stable = 0;
+    }
+    previousSig = probe.sig;
+    const remaining = deadline - now();
+    if (remaining <= 0) return;
+    await delayFn(Math.min(pollMs, remaining));
+  }
+}
+
+export const ACTION_SETTLE_DEFAULTS = {
+  /** Pause between probes — snappier than the pre-judge settle (250ms). */
+  pollMs: 100,
+  /** Consecutive ready-and-unchanged probes that count as settled. */
+  stableProbes: 2,
+} as const;
+
+export type ActionSettleFn = (
+  session: BrowserSessionLike,
+  timeoutMs: number,
+) => Promise<void>;
+
+/**
+ * The act-loop settle: reaction-aware, not merely quiet-aware. An action was
+ * just performed, so "nothing changed yet" is NOT settled — it is a page
+ * still thinking (JustPark's sign-in keeps the old document perfectly quiet
+ * for ~5s while a form POST is in flight; readyState, DOM size and the
+ * network are all invisible to JS during it). This wait therefore:
+ *
+ * 1. takes a baseline probe right after the action,
+ * 2. polls until the page signature DIFFERS from the baseline (or readyState
+ *    drops — a navigation in flight is itself the reaction),
+ * 3. then waits for `stableProbes` consecutive identical probes (the reaction
+ *    has finished rendering), and returns.
+ *
+ * A page that never reacts (a genuinely no-op action) waits out `timeoutMs`
+ * (the suite's `action_settle_ms`) and proceeds — the cap is the only fixed
+ * quantity; everything else is observed state. A fast site reacts within a
+ * poll or two and pays ~300ms total.
+ *
+ * Same best-effort contract as `waitForPageSettled`: never throws, exits
+ * early when the page cannot be probed.
+ */
+export async function waitForActionSettled(
+  session: BrowserSessionLike,
+  timeoutMs: number,
+  options: WaitForPageSettledOptions = {},
+): Promise<void> {
+  const pollMs = options.pollMs ?? ACTION_SETTLE_DEFAULTS.pollMs;
+  const stableProbes =
+    options.stableProbes ?? ACTION_SETTLE_DEFAULTS.stableProbes;
+  const actDeps = options.act ?? {};
+  const delayFn = options.delayFn ?? delay;
+  const now = options.now ?? (() => Date.now());
+  const deadline = now() + timeoutMs;
+
+  let baseline: SettleProbe | null;
+  try {
+    baseline = await probeSettleState(session, actDeps);
+  } catch {
+    return; // unprobeable — proceed; downstream reads surface real failures
+  }
+  if (baseline === null) return;
+
+  let previousSig = baseline.sig;
+  let reacted = false;
+  let stable = 0;
+  for (;;) {
+    if (now() >= deadline) return;
+    let probe: SettleProbe | null;
+    try {
+      probe = await probeSettleState(session, actDeps);
+    } catch {
+      return;
+    }
+    if (probe === null) return;
+    // readyState dropping means a navigation started; a busy banner means
+    // work is in flight — both are the reaction, even if the signature has
+    // not moved yet.
+    if (
+      !reacted &&
+      (probe.sig !== baseline.sig || !probe.ready || probe.busy)
+    ) {
+      reacted = true;
+    }
+    if (reacted && probe.ready && !probe.busy && probe.sig === previousSig) {
+      stable += 1;
+      if (stable >= stableProbes) return;
+    } else if (reacted) {
+      stable = 0;
+    }
+    previousSig = probe.sig;
+    const remaining = deadline - now();
+    if (remaining <= 0) return;
+    await delayFn(Math.min(pollMs, remaining));
+  }
 }
 
 /** The slice of playwright's Page `prepareBrowserState` needs. */

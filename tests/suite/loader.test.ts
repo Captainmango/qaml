@@ -78,6 +78,8 @@ base_url: https://example.com
 config:
   max_actions_per_step: 5
   step_timeout_ms: 60000
+  settle_timeout_ms: 5000
+  action_settle_ms: 4000
   continue_on_failure: true
   verdict_threshold: 0.9
   operation_confidence_threshold: 0.6
@@ -93,6 +95,8 @@ ${MINIMAL_STEP_YAML}`);
     expect(suite.config).toEqual({
       maxActionsPerStep: 5,
       stepTimeoutMs: 60_000,
+      settleTimeoutMs: 5_000,
+      actionSettleMs: 4_000,
       continueOnFailure: true,
       clearBrowserState: false,
       verdictThreshold: 0.9,
@@ -154,6 +158,8 @@ ${MINIMAL_STEP_YAML}`);
     expect(suite.config).toEqual({
       maxActionsPerStep: 30,
       stepTimeoutMs: 120_000,
+      settleTimeoutMs: 10_000,
+      actionSettleMs: 3_000,
       continueOnFailure: false,
       clearBrowserState: false,
       verdictThreshold: 0.7,
@@ -184,9 +190,9 @@ ${MINIMAL_STEP_YAML}`);
 });
 
 describe("loadSuite — validation errors", () => {
-  it("reports a missing expect with a steps[i].expect path", async () => {
+  it("loads a step without expect — it is simply not judged", async () => {
     const path = await writeSuite(`
-name: Broken suite
+name: Optional expect
 base_url: https://example.com
 steps:
   - id: first
@@ -195,8 +201,41 @@ steps:
   - id: second
     instruction: Do the second thing.
 `);
+    const suite = await loadSuite(path, {});
+
+    expect(suite.steps[0]?.expect).toBe("First thing done.");
+    expect(suite.steps[0]?.rawExpect).toBe("First thing done.");
+    expect(suite.steps[1]?.expect).toBeUndefined();
+    expect(suite.steps[1]?.rawExpect).toBeUndefined();
+  });
+
+  it("rejects an empty expect string", async () => {
+    const path = await writeSuite(`
+name: Empty expect
+base_url: https://example.com
+steps:
+  - id: only-step
+    instruction: Do something.
+    expect: ""
+`);
     await expect(loadSuite(path, {})).rejects.toThrow(
-      /steps\[1\]\.expect: Required/,
+      /steps\[0\]\.expect: Must not be empty/,
+    );
+  });
+
+  it("reports a missing instruction with a steps[i].instruction path", async () => {
+    const path = await writeSuite(`
+name: Broken suite
+base_url: https://example.com
+steps:
+  - id: first
+    instruction: Do the first thing.
+    expect: First thing done.
+  - id: second
+    expect: Second thing done.
+`);
+    await expect(loadSuite(path, {})).rejects.toThrow(
+      /steps\[1\]\.instruction: Required/,
     );
   });
 

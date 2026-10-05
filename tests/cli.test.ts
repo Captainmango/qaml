@@ -231,13 +231,13 @@ describe("cli validate", () => {
   it("exits 2 with the schema errors when the suite is invalid", async () => {
     const h = makeHarness({
       failLoad: new Error(
-        `Invalid suite ${SUITE_PATH}:\n  steps[1].expect: Required`,
+        `Invalid suite ${SUITE_PATH}:\n  steps[1].instruction: Required`,
       ),
     });
     const code = await h.cli("validate", SUITE_PATH);
 
     expect(code).toBe(EXIT_ERROR);
-    expect(h.err.join("\n")).toContain("steps[1].expect: Required");
+    expect(h.err.join("\n")).toContain("steps[1].instruction: Required");
     expect(h.out).toEqual([]);
   });
 

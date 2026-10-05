@@ -6,6 +6,7 @@ import {
   buildStepGoal,
   type RunStepOptions,
   runStep,
+  type SettlePageFn,
   type StepResult,
   stepOutcomeLine,
 } from "@/suite/step-runner.ts";
@@ -27,6 +28,8 @@ const LOGIN_SHOT = join(RUN_DIR, "steps", "login.png");
 const config: QamlSuiteConfig = {
   maxActionsPerStep: 5,
   stepTimeoutMs: 1000,
+  settleTimeoutMs: 800,
+  actionSettleMs: 400,
   continueOnFailure: false,
   clearBrowserState: false,
   verdictThreshold: 0.6,
@@ -46,13 +49,26 @@ function makeStep(overrides: Partial<QamlStep> = {}): QamlStep {
   };
 }
 
+/** Settle-wait double: records the timeout budgets it was called with. */
+class RecordingSettle {
+  readonly calls: number[] = [];
+  /** Flip to true to simulate a settle wait that blows up. */
+  fails = false;
+
+  readonly fn: SettlePageFn = async (_browser, timeoutMs) => {
+    this.calls.push(timeoutMs);
+    if (this.fails) throw new Error("settle probe exploded");
+  };
+}
+
 interface Harness {
   loop: ScriptedLoop;
   judge: ScriptedJudge;
   shot: RecordingScreenshot;
+  settle?: RecordingSettle;
 }
 
-/** Runs one step against a harness, wiring the three injectable seams. */
+/** Runs one step against a harness, wiring the four injectable seams. */
 function wire(h: Harness, extra: Partial<RunStepOptions> = {}) {
   const { deps, ...rest } = extra;
   return runStep({
@@ -65,6 +81,7 @@ function wire(h: Harness, extra: Partial<RunStepOptions> = {}) {
       runDecisionLoopFn: h.loop.fn,
       judgeFn: h.judge.fn,
       saveScreenshotFn: h.shot.fn,
+      settlePageFn: (h.settle ?? new RecordingSettle()).fn,
       ...deps,
     },
   });
@@ -317,6 +334,114 @@ describe("runStep — evidence is best-effort", () => {
   });
 });
 
+describe("runStep — no expectation is an unjudged step", () => {
+  const noExpectStep = makeStep({ expect: undefined, rawExpect: undefined });
+
+  it("passes on actor completion without consulting the judge", async () => {
+    const h = {
+      loop: new ScriptedLoop([agentResult("done")]),
+      judge: new ScriptedJudge([]),
+      shot: new RecordingScreenshot(),
+    };
+
+    const result = await wire(h, { step: noExpectStep });
+
+    expect(result.status).toBe("passed");
+    expect(result.verdict).toBeNull();
+    expect(h.judge.count).toBe(0); // nothing to verify — never judged
+    expect(h.shot.paths).toEqual([LOGIN_SHOT]); // evidence still captured
+  });
+
+  it("still fails honestly when the actor never claimed completion", async () => {
+    const h = {
+      loop: new ScriptedLoop([agentResult("blocked")]),
+      judge: new ScriptedJudge([]),
+      shot: new RecordingScreenshot(),
+    };
+
+    const result = await wire(h, { step: noExpectStep });
+
+    expect(result.status).toBe("failed");
+    expect(result.verdict).toBeNull();
+  });
+});
+
+describe("runStep — page settle before observe", () => {
+  it("settles with the suite's settle budget when the step budget allows", async () => {
+    const settle = new RecordingSettle();
+    const h = {
+      loop: new ScriptedLoop([agentResult("done")]),
+      judge: new ScriptedJudge([
+        judgeResult({ passed: true, probability: 0.9 }),
+      ]),
+      shot: new RecordingScreenshot(),
+      settle,
+    };
+
+    await wire(h);
+
+    // The step budget (1000) minus one clock read still exceeds the settle
+    // budget (800) — the settle budget wins.
+    expect(settle.calls).toEqual([config.settleTimeoutMs]);
+  });
+
+  it("caps the settle wait at the remaining step budget", async () => {
+    let t = 0;
+    const now = (): number => {
+      const current = t;
+      t += 950;
+      return current;
+    };
+    const settle = new RecordingSettle();
+    const h = {
+      loop: new ScriptedLoop([agentResult("done")]),
+      judge: new ScriptedJudge([
+        judgeResult({ passed: true, probability: 0.9 }),
+      ]),
+      shot: new RecordingScreenshot(),
+      settle,
+    };
+
+    await wire(h, { deps: { now } });
+
+    // Start at 0 (deadline 1000); the settle cap read returns 950, leaving
+    // 50ms of step budget — far below the 800ms settle budget.
+    expect(settle.calls).toEqual([50]);
+  });
+
+  it("keeps the real status when the settle wait fails", async () => {
+    const settle = new RecordingSettle();
+    settle.fails = true;
+    const h = {
+      loop: new ScriptedLoop([agentResult("done")]),
+      judge: new ScriptedJudge([
+        judgeResult({ passed: true, probability: 0.9 }),
+      ]),
+      shot: new RecordingScreenshot(),
+      settle,
+    };
+
+    const result = await wire(h);
+
+    expect(settle.calls).toHaveLength(1);
+    expect(result.status).toBe("passed");
+  });
+
+  it("settles even for a step without an expectation (evidence + next step)", async () => {
+    const settle = new RecordingSettle();
+    const h = {
+      loop: new ScriptedLoop([agentResult("done")]),
+      judge: new ScriptedJudge([]),
+      shot: new RecordingScreenshot(),
+      settle,
+    };
+
+    await wire(h, { step: makeStep({ expect: undefined }) });
+
+    expect(settle.calls).toEqual([config.settleTimeoutMs]);
+  });
+});
+
 describe("runStep — goal context, config, and timing", () => {
   it("prepends prior outcomes and forwards suite config to the actor", async () => {
     const h = {
@@ -335,6 +460,7 @@ describe("runStep — goal context, config, and timing", () => {
     expect(call?.maxActions).toBe(config.maxActionsPerStep);
     expect(call?.timeoutMs).toBe(config.stepTimeoutMs);
     expect(call?.confidenceThreshold).toBe(config.operationConfidenceThreshold);
+    expect(call?.actionSettleMs).toBe(config.actionSettleMs);
   });
 
   it("measures the whole step with the injected clock", async () => {
@@ -354,8 +480,9 @@ describe("runStep — goal context, config, and timing", () => {
 
     const result = await wire(h, { deps: { now } });
 
-    // now() is read for the start, the two budget checks (evidence, judge),
-    // and the end — the duration spans start to end regardless.
-    expect(result.durationMs).toBe(3000);
+    // now() is read for the start, the settle cap, the two budget checks
+    // (evidence, judge), and the end — the duration spans start to end
+    // regardless.
+    expect(result.durationMs).toBe(4000);
   });
 });

@@ -7,7 +7,11 @@ import {
   runDecisionLoop,
 } from "@/agent/loop.ts";
 import type { TextHelper } from "@/agent/text.ts";
-import { type BrowserSessionLike, screenshot } from "@/browser/connection.ts";
+import {
+  type BrowserSessionLike,
+  screenshot,
+  waitForPageSettled,
+} from "@/browser/connection.ts";
 import type { QamlStep, QamlSuiteConfig } from "@/suite/schema.ts";
 import {
   type JudgeOptions,
@@ -19,13 +23,16 @@ import { errorMessage } from "@/utils/errors.ts";
 import { withTimeout } from "@/utils/timing.ts";
 
 /**
- * Per-step execution: ACT with the decision loop, then independently JUDGE
- * the expectation, and always capture evidence. The two
- * halves are deliberately separate Jev responsibilities — a `DONE` from the
- * actor is a claim the judge must confirm against a fresh view of the page.
+ * Per-step execution: ACT with the decision loop, SETTLE the page, then
+ * independently JUDGE the expectation (when the step has one), and always
+ * capture evidence. Acting and judging are deliberately separate Jev
+ * responsibilities — a `DONE` from the actor is a claim the judge must
+ * confirm against a fresh view of the page.
  *
  * Status mapping (honesty is the whole point):
  *
+ * - actor `done` + no `expect` → `passed` unjudged — there is no expectation
+ *   to verify, so the actor's completion claim stands on its own.
  * - actor `done` → judge → `passed`/`failed` on the verdict; a broken judge
  *   (verdict null) is an infra `error`, never an honest `failed`.
  * - actor `blocked`/`max_actions`/`timeout` → `failed` (honest non-completion;
@@ -35,13 +42,20 @@ import { withTimeout } from "@/utils/timing.ts";
  *   contract — the loop classifies via `retryable: false`) is never retried:
  *   it would fail identically while re-executing the cycles already run.
  *
- * `step_timeout_ms` is a hard cap for the WHOLE step (act + judge + evidence,
- * as the schema documents): the act loop enforces the deadline inside its
- * phase, and the judge + screenshot are raced against the remaining budget,
- * so a hung CDP read can't exceed the cap unboundedly.
+ * Between act and observe the step waits for the page to SETTLE
+ * (`waitForPageSettled`: readyState complete + the DOM quiet across
+ * consecutive probes), so slow sites are never judged or screenshotted
+ * mid-load. The wait is best-effort and double-capped (the suite's
+ * `settle_timeout_ms` and the remaining step budget): a page that never goes
+ * quiet proceeds to the judge at the cap instead of starving it.
+ *
+ * `step_timeout_ms` is a hard cap for the WHOLE step (act + settle + judge +
+ * evidence, as the schema documents): the act loop enforces the deadline
+ * inside its phase, and the settle, judge, and screenshot are raced against
+ * the remaining budget, so a hung CDP read can't exceed the cap unboundedly.
  *
  * Evidence (`<runDir>/steps/<id>.png`) is written regardless of outcome — a
- * stuck page is diagnostic gold. Capture starts right after the act phase:
+ * stuck page is diagnostic gold. Capture starts right after the settle wait:
  * the page is settled and the judge's reads are independent of it, so the
  * two run concurrently. It stays best-effort (and budget-capped) so a dead
  * browser never masks the step's real status.
@@ -64,6 +78,10 @@ export type RunDecisionLoopFn = (
   opts: RunDecisionLoopOptions,
 ) => Promise<AgentRunResult>;
 export type JudgeFn = (opts: JudgeOptions) => Promise<JudgeResult>;
+export type SettlePageFn = (
+  browser: BrowserSessionLike,
+  timeoutMs: number,
+) => Promise<void>;
 export type SaveScreenshotFn = (
   session: BrowserSessionLike,
   filePath: string,
@@ -78,6 +96,8 @@ export interface StepRunnerDeps {
   runDecisionLoopFn?: RunDecisionLoopFn;
   /** Overrides the whole judge (tests). */
   judgeFn?: JudgeFn;
+  /** Overrides the post-act page-settle wait (tests). */
+  settlePageFn?: SettlePageFn;
   /** Writes the evidence PNG; defaults to browser screenshot → fs. */
   saveScreenshotFn?: SaveScreenshotFn;
   now?: () => number;
@@ -98,6 +118,9 @@ const defaultSaveScreenshot: SaveScreenshotFn = async (session, filePath) => {
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, await screenshot(session));
 };
+
+const defaultSettlePage: SettlePageFn = (browser, timeoutMs) =>
+  waitForPageSettled(browser, { timeoutMs });
 
 /**
  * Prepends earlier steps' one-line outcomes to the instruction so steps like
@@ -132,6 +155,7 @@ export async function runStep(opts: RunStepOptions): Promise<StepResult> {
   const now = deps.now ?? (() => Date.now());
   const runLoop = deps.runDecisionLoopFn ?? runDecisionLoop;
   const judge = deps.judgeFn ?? judgeExpectation;
+  const settlePage = deps.settlePageFn ?? defaultSettlePage;
   const saveScreenshotFn = deps.saveScreenshotFn ?? defaultSaveScreenshot;
   const { config } = opts;
 
@@ -151,6 +175,7 @@ export async function runStep(opts: RunStepOptions): Promise<StepResult> {
     maxActions: config.maxActionsPerStep,
     timeoutMs: config.stepTimeoutMs,
     confidenceThreshold: config.operationConfidenceThreshold,
+    actionSettleMs: config.actionSettleMs,
     deps: {
       ...(deps.jev !== undefined && { jev: deps.jev }),
       ...(deps.textHelper !== undefined && { textHelper: deps.textHelper }),
@@ -168,6 +193,15 @@ export async function runStep(opts: RunStepOptions): Promise<StepResult> {
     }
   }
 
+  // Settle before observing: the actor's last action may have kicked off a
+  // navigation or late content the judge must not miss. Best-effort and
+  // double-capped (suite settle budget, remaining step budget) — a page that
+  // never goes quiet proceeds to the judge at the cap instead of starving it.
+  await settlePage(
+    opts.browser,
+    Math.min(config.settleTimeoutMs, remainingMs()),
+  ).catch(() => {});
+
   // Evidence starts now and runs concurrently with the judge: both read the
   // same settled post-act page and are independent. Best-effort and capped
   // by the remaining budget, so a dead browser never overwrites the step's
@@ -182,9 +216,13 @@ export async function runStep(opts: RunStepOptions): Promise<StepResult> {
   );
 
   // Judge only when the actor claims DONE; a non-done actor already failed.
+  // A step without an expectation has nothing to verify — the actor's
+  // completion claim stands on its own (unjudged pass, verdict null).
   let verdict: Verdict | null = null;
   let status: StepStatus;
-  if (agent.status === "done") {
+  if (agent.status === "done" && opts.step.expect === undefined) {
+    status = "passed";
+  } else if (agent.status === "done" && opts.step.expect !== undefined) {
     const judged = await withTimeout(
       judge({
         browser: opts.browser,

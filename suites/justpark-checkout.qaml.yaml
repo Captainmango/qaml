@@ -1,11 +1,14 @@
-# suites/examples/saucedemo-login.qaml.yaml
+# suites/justpark-checkout.qaml.yaml
 name: JustPark login, search, and checkout
 description: Validate the standard flow for a user making a booking on Web
-base_url: https://e2e.justpark.me
+base_url: https://www.justpark.com
 config:
   max_actions_per_step: 100      # Jev decision-cycle budget per step
   step_timeout_ms: 120000
-  continue_on_failure: true
+  action_settle_ms: 3000         # cap on the reaction-aware post-action settle —
+                                 # JustPark's sign-in keeps the old page silent for
+                                 # ~5s while the form POST is in flight
+  continue_on_failure: false
   # clear_browser_state: true   # wipe cookies/storage at base_url before step 1
                                 # (off by default: state carries into the run)
   verdict_threshold: 0.35        # Jev noul probability required to pass
@@ -23,36 +26,49 @@ env:                            # names that must exist in process env
   - CARD_EXPIRY
   - CARD_CVV
 steps:
-  # - id: accept-cookies
-  #   instruction: if the cookie banner is present, accept all cookies
-  #   expect: that cookies were accepted
+  - id: accept-cookies
+    instruction: >-
+      If a cookie consent banner is visible, accept all cookies. If no banner
+      is visible, there is nothing to do — finish immediately.
+    expect: the cookie consent banner is not visible on the page
   - id: login
-    instruction: login to the website with ${SAUCE_USERNAME} and ${SAUCE_PASSWORD} if the button is showing
-    expect: the top bar to have the text "Nigel"
+    instruction: >-
+      If a Login button is showing, login to the website with
+      ${SAUCE_USERNAME} and ${SAUCE_PASSWORD}. If no Login button is showing
+      (already signed in), there is nothing to do — finish immediately.
+    expect: the top bar to have the text "Edward H"
   - id: search-for-a-space
-    instruction: search for parking in Camden Town. Make sure to select the entry from the dropdown
+    instruction: >-
+      Search for parking in Camden Town: type the location into the search
+      box, select the Camden Town entry from the dropdown, then press the
+      button that shows the parking spaces so the results load.
     expect: the page to contain search pins with prices
   - id: search-for-a-space-2
     instruction: Set the search from time to be 29/11/2026 at 10:00
-    expect: n/a
   - id: search-for-a-space-3
     instruction: Set the search until time to be 29/11/2026 at 18:00
-    expect: n/a
   - id: select-listing
     instruction: select a listing from the available results
     expect: a button showing the text "Reserve" with a price
   - id: go-to-checkout
-    instruction: click the reserve button
+    instruction: >-
+      Click the Reserve button for the selected listing (in the listing
+      details panel, e.g. "Reserve £…" — not a price pin on the map).
     expect: the checkout screen to show
   - id: add-phone-number
     instruction: add a UK mobile phone number in the phone number input and save
-    expect: n/a
+  - id: close-photo-viewer
+    instruction: >-
+      If a photo or map viewer overlay is open on top of the checkout page
+      (a large image with 1 / 5 navigation), press Escape to close it. If no
+      overlay is open, do nothing and finish.
   - id: change-payment-card
-    instruction: in Payment information, click the change button
-    expect: n/a
+    instruction: >-
+      In the Payment information section of the checkout form, click the
+      Change button next to the saved payment card (scroll to the section if
+      it is not visible).
   - id: change-payment-card-2
     instruction: Click the payment card ending 1111
-    expect: n/a
   - id: checkout
     instruction: checkout the booking made in the UI
     expect: The booking details screen to show with a confirmation and booking ID

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  EXECUTOR_DELAYS,
   executeOperation,
   getDropdownOptions,
   parseDropdownOptions,
@@ -8,54 +7,67 @@ import {
   WAIT_SECONDS,
 } from "@/agent/executor.ts";
 import type { BrowserSessionLike } from "@/browser/connection.ts";
-import { RecordingAct } from "./helpers.ts";
+import { SUITE_CONFIG_DEFAULTS } from "@/suite/schema.ts";
+import { RecordingAct, RecordingSettle } from "./helpers.ts";
 
-// The executor only forwards the session to act(); a stand-in is enough.
+// The executor only forwards the session to act()/settleFn; a stand-in is enough.
 const session = {} as BrowserSessionLike;
+
+/** Distinctive cap so assertions can tell it from the suite default. */
+const SETTLE_CAP = 1234;
 
 interface RunOptions {
   operation: Parameters<typeof executeOperation>[0]["operation"];
   targetIndex?: number | null;
   text?: string | null;
   act?: RecordingAct;
-  delays?: number[];
+  /** Omitted → the executor falls back to the suite-config default. */
+  settleMs?: number;
 }
 
 async function run(options: RunOptions) {
   const recording = options.act ?? new RecordingAct();
-  const delays = options.delays ?? [];
+  const settle = new RecordingSettle();
   const outcome = await executeOperation({
     session,
     operation: options.operation,
     targetIndex: options.targetIndex,
     text: options.text,
     actFn: recording.fn,
-    delayFn: async (ms) => {
-      delays.push(ms);
-    },
+    settleFn: settle.fn,
+    ...(options.settleMs !== undefined && { settleMs: options.settleMs }),
   });
-  return { outcome, recording, delays };
+  return { outcome, recording, settle };
 }
 
 describe("executeOperation", () => {
-  it("maps CLICK to click_element_by_index with the capped settle delay", async () => {
-    const { outcome, recording, delays } = await run({
+  it("maps CLICK to click_element_by_index and settles adaptively", async () => {
+    const { outcome, recording, settle } = await run({
       operation: "CLICK",
       targetIndex: 3,
+      settleMs: SETTLE_CAP,
     });
 
     expect(recording.calls).toEqual([
       { name: "click_element_by_index", params: { index: 3 } },
     ]);
-    expect(delays).toEqual([EXECUTOR_DELAYS.settleMs]);
+    // The settle is probe-driven with the cap forwarded — not a fixed sleep.
+    expect(settle.calls).toEqual([SETTLE_CAP]);
     expect(outcome).toEqual({ ok: true, message: "ok" });
   });
 
-  it("maps TYPE_TEXT to input_text and uses the longer combobox budget", async () => {
-    const { recording, delays } = await run({
+  it("defaults the settle cap to the suite's action_settle_ms", async () => {
+    const { settle } = await run({ operation: "CLICK", targetIndex: 3 });
+
+    expect(settle.calls).toEqual([SUITE_CONFIG_DEFAULTS.actionSettleMs]);
+  });
+
+  it("maps TYPE_TEXT to input_text with the same adaptive settle", async () => {
+    const { recording, settle } = await run({
       operation: "TYPE_TEXT",
       targetIndex: 1,
       text: "standard_user",
+      settleMs: SETTLE_CAP,
     });
 
     expect(recording.calls).toEqual([
@@ -64,33 +76,36 @@ describe("executeOperation", () => {
         params: { index: 1, text: "standard_user" },
       },
     ]);
-    expect(delays).toEqual([EXECUTOR_DELAYS.afterTypeMs]);
-    expect(EXECUTOR_DELAYS.afterTypeMs).toBeLessThanOrEqual(200);
-    expect(EXECUTOR_DELAYS.settleMs).toBeLessThanOrEqual(50);
+    // Combobox suggestions are DOM changes — the settle probe catches them,
+    // so typing no longer needs its own fixed budget.
+    expect(settle.calls).toEqual([SETTLE_CAP]);
   });
 
   it("maps SELECT to select_dropdown_option with the chosen text", async () => {
-    const { recording } = await run({
+    const { recording, settle } = await run({
       operation: "SELECT",
       targetIndex: 4,
       text: "Japan",
+      settleMs: SETTLE_CAP,
     });
 
     expect(recording.calls).toEqual([
       { name: "select_dropdown_option", params: { index: 4, text: "Japan" } },
     ]);
+    expect(settle.calls).toEqual([SETTLE_CAP]);
   });
 
   it("maps SCROLL_DOWN/UP to one-page scroll actions", async () => {
-    const down = await run({ operation: "SCROLL_DOWN" });
+    const down = await run({ operation: "SCROLL_DOWN", settleMs: SETTLE_CAP });
     expect(down.recording.calls).toEqual([
       {
         name: "scroll",
         params: { down: true, num_pages: SCROLL_PAGES },
       },
     ]);
+    expect(down.settle.calls).toEqual([SETTLE_CAP]);
 
-    const up = await run({ operation: "SCROLL_UP" });
+    const up = await run({ operation: "SCROLL_UP", settleMs: SETTLE_CAP });
     expect(up.recording.calls).toEqual([
       {
         name: "scroll",
@@ -99,21 +114,38 @@ describe("executeOperation", () => {
     ]);
   });
 
+  it("maps PRESS_ESCAPE to send_keys Escape (overlay dismissal)", async () => {
+    const { recording, settle } = await run({
+      operation: "PRESS_ESCAPE",
+      settleMs: SETTLE_CAP,
+    });
+
+    expect(recording.calls).toEqual([
+      { name: "send_keys", params: { keys: "Escape" } },
+    ]);
+    expect(settle.calls).toEqual([SETTLE_CAP]);
+  });
+
   it("maps WAIT to a short bounded wait with no extra settle", async () => {
-    const { recording, delays } = await run({ operation: "WAIT" });
+    const { recording, settle } = await run({
+      operation: "WAIT",
+      settleMs: SETTLE_CAP,
+    });
 
     expect(recording.calls).toEqual([
       { name: "wait", params: { seconds: WAIT_SECONDS } },
     ]);
-    expect(delays).toEqual([]);
+    // The wait action IS the settle — no adaptive settle on top.
+    expect(settle.calls).toEqual([]);
   });
 
   it("refuses terminal operations — those are loop-level, not actions", async () => {
-    const { outcome, recording } = await run({ operation: "DONE" });
+    const { outcome, recording, settle } = await run({ operation: "DONE" });
 
     expect(outcome.ok).toBe(false);
     expect(outcome.message).toMatch(/not executable/);
     expect(recording.calls).toEqual([]);
+    expect(settle.calls).toEqual([]);
   });
 
   it("fails without executing when a required target/text is missing", async () => {
@@ -121,23 +153,27 @@ describe("executeOperation", () => {
     expect(noTarget.outcome.ok).toBe(false);
     expect(noTarget.outcome.message).toMatch(/requires a target/);
     expect(noTarget.recording.calls).toEqual([]);
+    expect(noTarget.settle.calls).toEqual([]);
 
     const noText = await run({ operation: "TYPE_TEXT", targetIndex: 1 });
     expect(noText.outcome.ok).toBe(false);
     expect(noText.outcome.message).toMatch(/requires text/);
     expect(noText.recording.calls).toEqual([]);
+    expect(noText.settle.calls).toEqual([]);
   });
 
-  it("reports action-level errors as outcomes instead of throwing", async () => {
+  it("reports action-level errors as outcomes and still settles", async () => {
     const act = new RecordingAct(() => ({ error: "element not clickable" }));
-    const { outcome, delays } = await run({
+    const { outcome, settle } = await run({
       operation: "CLICK",
       targetIndex: 3,
       act,
+      settleMs: SETTLE_CAP,
     });
 
     expect(outcome).toEqual({ ok: false, message: "element not clickable" });
-    expect(delays).toEqual([EXECUTOR_DELAYS.settleMs]);
+    // A failed click often still kicked off a reaction — settle anyway.
+    expect(settle.calls).toEqual([SETTLE_CAP]);
   });
 
   it("surfaces registry throws to the caller as errors (loop catches them)", async () => {

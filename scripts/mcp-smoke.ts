@@ -39,8 +39,8 @@ const SCHEMA_BROKEN_YAML = `
 name: Broken suite
 base_url: https://example.com
 steps:
-  - id: missing-expect
-    instruction: Do something.
+  - id: missing-instruction
+    expect: Something happened.
 `;
 
 const SYNTAX_BROKEN_YAML = `
@@ -163,8 +163,10 @@ async function main(): Promise<void> {
       | undefined;
     check(schemaStructured?.valid === false, "schema-broken suite passed");
     check(
-      (schemaStructured?.errors ?? []).some((line) => line.includes("expect")),
-      "schema errors do not mention the missing `expect` key",
+      (schemaStructured?.errors ?? []).some((line) =>
+        line.includes("instruction"),
+      ),
+      "schema errors do not mention the missing `instruction` key",
     );
     check(schemaBroken.isError !== true, "invalid suite became a tool error");
 

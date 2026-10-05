@@ -4,18 +4,24 @@ import {
   act,
   BROWSER_ACTIONS,
   type BrowserSessionLike,
+  waitForActionSettled,
 } from "@/browser/connection.ts";
-import { delay } from "@/utils/timing.ts";
+import { SUITE_CONFIG_DEFAULTS } from "@/suite/schema.ts";
 
 /**
  * Op + target → browser-use registry action. Every call goes through the
  * browser `act()` seam; nothing here knows about Jev, and nothing generative
  * happens here.
  *
- * After each action we wait for useful state with HARD caps (jev-ultrafast's
- * budgets: ≤200ms for combobox suggestions after typing, ~50ms / two frames
- * otherwise). browser-use actions already do their own stability waiting —
- * ours is deliberately thin, and injectable so tests never sleep.
+ * After each action we wait for the page to REACT — adaptively, never on a
+ * fixed calendar. The settle (`waitForActionSettled`) probes readyState +
+ * DOM size and returns the moment the page goes quiet, hard-capped at
+ * `settleMs` (the suite's `action_settle_ms`) for pages that never go quiet.
+ * A fast site pays ~200ms; a slow site gets the full window to bring up the
+ * UI its next snapshot must show. browser-use actions add their own
+ * stability waiting underneath; the settle seam is injectable so tests
+ * never sleep. The WAIT action is the one op that skips the settle — the
+ * wait IS the settle there.
  */
 
 export type ActFn = (
@@ -23,6 +29,12 @@ export type ActFn = (
   actionName: string,
   params?: Record<string, unknown>,
 ) => Promise<ActionResult>;
+
+/** Adaptive page-settle wait seam (default: `waitForActionSettled`). */
+export type SettleFn = (
+  session: BrowserSessionLike,
+  timeoutMs: number,
+) => Promise<void>;
 
 /** One native dropdown / ARIA menu option, as parsed from the action output. */
 export interface DropdownOption {
@@ -37,13 +49,6 @@ export interface ExecutionOutcome {
   message: string | null;
 }
 
-export const EXECUTOR_DELAYS = {
-  /** Combobox-suggestion budget after typing (jev-ultrafast: ≤200ms). */
-  afterTypeMs: 200,
-  /** Two-frame settle for everything else (jev-ultrafast: ~50ms). */
-  settleMs: 50,
-} as const;
-
 /** browser-use's wait action subtracts a 1s offset, so 2 → ~1s real. */
 export const WAIT_SECONDS = 2;
 export const SCROLL_PAGES = 1;
@@ -56,7 +61,13 @@ export interface ExecuteOperationOptions {
   /** Typed text (TYPE_TEXT) or chosen option text (SELECT). */
   text?: string | null;
   actFn?: ActFn;
-  delayFn?: (ms: number) => Promise<void>;
+  /** Adaptive post-action settle. Default: `waitForActionSettled`. */
+  settleFn?: SettleFn;
+  /**
+   * Hard cap on the post-action settle (ms) — the wait itself ends early as
+   * soon as the page goes quiet. Default: suite config (`action_settle_ms`).
+   */
+  settleMs?: number;
 }
 
 /** The default actFn: straight through to `act` (shared by the loop). */
@@ -75,14 +86,17 @@ function failed(message: string): ExecutionOutcome {
 /**
  * Executes one decided operation. Never throws for action-level failures —
  * they come back as `{ ok: false }` so the loop can note them in the trace
- * and decide (retry via re-snapshot, or give up after a streak).
+ * and decide (retry via re-snapshot, or give up after a streak). Failed
+ * actions settle too: a click that "failed" (intercepted, detached target)
+ * often still kicked off the page reaction the next snapshot must see.
  */
 export async function executeOperation(
   options: ExecuteOperationOptions,
 ): Promise<ExecutionOutcome> {
   const { session, operation, targetIndex, text } = options;
   const actFn = options.actFn ?? defaultAct;
-  const delayFn = options.delayFn ?? delay;
+  const settleFn = options.settleFn ?? waitForActionSettled;
+  const settleMs = options.settleMs ?? SUITE_CONFIG_DEFAULTS.actionSettleMs;
 
   const needsTarget =
     operation === "CLICK" ||
@@ -99,7 +113,9 @@ export async function executeOperation(
   }
 
   let result: ActionResult;
-  let settleMs: number = EXECUTOR_DELAYS.settleMs;
+  // Every real action gets the adaptive post-action settle — except WAIT,
+  // where the wait action IS the settle.
+  let settles = true;
   switch (operation) {
     case "CLICK":
       result = await actFn(session, BROWSER_ACTIONS.click, {
@@ -111,8 +127,8 @@ export async function executeOperation(
         index: targetIndex,
         text,
       });
-      // Typing can pop combobox suggestions — give them the bounded window.
-      settleMs = EXECUTOR_DELAYS.afterTypeMs;
+      // Typing can pop combobox suggestions — the settle probe sees them
+      // arrive (DOM changes) and waits for them instead of a fixed window.
       break;
     case "SELECT":
       result = await actFn(session, BROWSER_ACTIONS.selectDropdown, {
@@ -132,18 +148,23 @@ export async function executeOperation(
         num_pages: SCROLL_PAGES,
       });
       break;
+    case "PRESS_ESCAPE":
+      result = await actFn(session, BROWSER_ACTIONS.sendKeys, {
+        keys: "Escape",
+      });
+      break;
     case "WAIT":
       result = await actFn(session, BROWSER_ACTIONS.wait, {
         seconds: WAIT_SECONDS,
       });
-      // The wait action IS the settle — no extra delay on top.
-      settleMs = 0;
+      // The wait action IS the settle — no extra wait on top.
+      settles = false;
       break;
     default:
       return failed(`operation ${operation} is not executable`);
   }
 
-  if (settleMs > 0) await delayFn(settleMs);
+  if (settles) await settleFn(session, settleMs);
   return outcomeFrom(result);
 }
 

@@ -364,6 +364,31 @@ describe("formatReportMarkdown — failed & error expansion", () => {
     expect(markdown).toContain("**Verdict:** no verdict — the judge failed");
   });
 
+  it("says a step without expect is not judged, not unavailable", () => {
+    const suite = makeSuite();
+    suite.steps = [
+      makeStep("login", { expect: undefined, rawExpect: undefined }),
+    ];
+    const result = makeSuiteResult({
+      status: "failed",
+      steps: [
+        stepResult("login", "failed", {
+          agent: agentResult("blocked"),
+          verdict: null,
+        }),
+      ],
+    });
+    const markdown = formatReportMarkdown(result, suite);
+
+    expect(markdown).toContain(
+      "**Expectation (raw):** _(none — this step is not judged)_",
+    );
+    expect(markdown).not.toContain("_(unavailable");
+    expect(markdown).toContain(
+      "**Verdict:** not judged — the actor finished as `blocked`",
+    );
+  });
+
   it("says the expectation is unavailable when no suite was passed", () => {
     const markdown = formatReportMarkdown(failedResult());
 
