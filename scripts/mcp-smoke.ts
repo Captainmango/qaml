@@ -5,8 +5,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { RunSuiteOutput, ValidateSuiteOutput } from "@/mcp/server.ts";
 
 /**
- * Offline smoke test for the MCP server (stage 10): spawns
- * `bun run src/mcp/server.ts` as a child over stdio and drives it with a real
+ * Offline smoke test for the MCP server (stage 10): spawns the server (see
+ * serverCommand below: `bun run src/mcp/server.ts`, or QAML_MCP_COMMAND) as a
+ * child over stdio and drives it with a real
  * MCP client — initialize handshake, `tools/list`, and `validate_suite` calls
  * (valid example YAML, schema-broken YAML, syntax-broken YAML). It also checks
  * the error-mapping contract: `run_suite` on a server whose
@@ -87,11 +88,23 @@ function inputProperties(tool: { inputSchema?: unknown } | undefined): object {
   return schema?.properties ?? {};
 }
 
+/**
+ * The server under test: `bun run src/mcp/server.ts` by default, or whatever
+ * QAML_MCP_COMMAND holds (space-separated command + args) — that is how the
+ * compiled standalone binary gets smoked:
+ *   bun run build:mcp && QAML_MCP_COMMAND=./dist/qaml-mcp bun run scripts/mcp-smoke.ts
+ */
+function serverCommand(): { command: string; args: string[] } {
+  const override = process.env.QAML_MCP_COMMAND?.trim();
+  if (!override) return { command: "bun", args: ["run", "src/mcp/server.ts"] };
+  const [command, ...args] = override.split(/\s+/);
+  return { command: command ?? override, args };
+}
+
 async function main(): Promise<void> {
   const exampleYaml = readFileSync(EXAMPLE_SUITE_PATH, "utf8");
   const transport = new StdioClientTransport({
-    command: "bun",
-    args: ["run", "src/mcp/server.ts"],
+    ...serverCommand(),
     cwd: REPO_ROOT,
     env: childEnv(),
   });

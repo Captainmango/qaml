@@ -16,7 +16,7 @@ Under the hood: a local [Steel](https://steel.dev) browser (Docker), [browser-us
 
 ## Prerequisites
 
-- [Bun](https://bun.com) v1.4+
+- [Bun](https://bun.com) v1.4+ — to run from source and to build the [standalone binary](#standalone-binary); a built binary needs neither
 - Docker 20.10+ with the Compose plugin (for the local Steel browser)
 - A TypeSafe API key (`QAML_DECISION_MODEL_API_KEY`)
 - An OpenAI-compatible chat endpoint for the text helper (only used by steps that type text)
@@ -106,6 +106,74 @@ Claude Desktop (`claude_desktop_config.json`):
 
 To explore the tools by hand: `bunx @modelcontextprotocol/inspector bun run src/mcp/server.ts`.
 
+## Standalone binary
+
+QAML compiles to a self-contained executable with [Bun's single-file bundler](https://bun.com/docs/bundler/executables). Bun is needed to *build* it; running it needs only a reachable Steel instance and the model keys.
+
+```bash
+git clone https://github.com/Captainmango/qaml.git
+cd qaml
+bun install            # browser-use's Chromium download is skipped — Steel hosts the browser
+bun run build          # → dist/qaml       (CLI)
+bun run build:mcp      # → dist/qaml-mcp   (MCP stdio server)
+bun run build:all      # both
+```
+
+Each artifact is ~90 MB (the Bun runtime is embedded) and runs anywhere on the same platform. Use it exactly like `bun run qaml` — same commands, flags, exit codes, and `.env` handling: Bun's dotenv autoload is baked in, so the executable reads `.env` (plus `.env.local` and `.env.$NODE_ENV[.local]`) from the **working directory it is invoked in** — never from next to the binary, and never from a parent directory — and real environment variables win over anything in those files.
+
+```bash
+./dist/qaml validate suites/examples/saucedemo-login.qaml.yaml
+./dist/qaml run suites/examples/saucedemo-login.qaml.yaml --out ./reports
+```
+
+Reports land in `runs/` under the directory you invoke the binary from, unless you pass `--out` or set `QAML_RUNS_DIR`.
+
+For the MCP server, register the binary instead of `bun run src/mcp/server.ts`:
+
+```json
+{
+  "mcp": {
+    "qaml": {
+      "type": "local",
+      "command": ["/abs/path/to/qaml/dist/qaml-mcp"],
+      "environment": { "QAML_DECISION_MODEL_API_KEY": "…" }
+    }
+  }
+}
+```
+
+Smoke the compiled server offline:
+
+```bash
+bun run build:mcp && QAML_MCP_COMMAND=./dist/qaml-mcp bun run scripts/mcp-smoke.ts
+```
+
+### Cross-compiling
+
+`scripts/build-binary.ts` takes `--target`, so one machine can produce every platform's artifact (Bun downloads the target runtime on first use, which needs network):
+
+```bash
+bun run scripts/build-binary.ts --entry all --target bun-windows-x64
+```
+
+| `--target` | Artifacts |
+| --- | --- |
+| `bun-linux-x64`, `bun-linux-arm64` | `qaml`, `qaml-mcp` |
+| `bun-windows-x64` | `qaml.exe`, `qaml-mcp.exe` |
+| `bun-darwin-x64`, `bun-darwin-arm64` | `qaml`, `qaml-mcp` |
+
+Other flags: `--entry cli|mcp|all` (default `cli`), `--out-dir <dir>` (default `dist`), `--bytecode` (faster cold start, larger artifact, host platform only), `--no-verify` (skip booting the artifact afterwards). Host builds are verified by default: the CLI must answer `--help`, the MCP server must complete an `initialize` handshake.
+
+### Build notes
+
+- Minification is deliberately not offered: browser-use derives identifiers from function and class names at runtime, so a minified bundle dies before the first snapshot.
+- The build inlines browser-use's DOM-extraction script (`dist/dom/service.js` reads it from a path that does not exist inside an executable) and marks playwright-core's optional `chromium-bidi` require external. Both live in `scripts/build-binary.ts` and fail loudly if browser-use changes shape.
+- No other runtime file access is bundled around: `canvas` and browser-use's other heavy optional deps sit behind subpaths QAML never imports.
+
+### Releases
+
+Binaries are built locally for now. The next step is a GitHub Actions matrix — one job per OS running `bun run build:all`, artifacts attached to a release. `scripts/build-binary.ts` is the single entry point that workflow will call, so the instructions above do not change when it lands.
+
 ## Development
 
 ```bash
@@ -113,4 +181,5 @@ bun run test        # vitest unit tests (offline)
 bun run typecheck   # tsc --noEmit
 bun run check       # Biome lint + format
 bun run scripts/mcp-smoke.ts   # offline MCP end-to-end smoke (spawns the server)
+bun run build       # standalone executable → dist/qaml (see above)
 ```
